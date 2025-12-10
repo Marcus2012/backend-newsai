@@ -1,0 +1,482 @@
+openapi: 3.0.0
+info:
+  title: News AI Generator API
+  description: Sistema de scraping automático y generación de noticias con IA
+  version: 1.0.0
+  contact:
+    name: Support
+    url: https://github.com/tuusername/news-ai-generator
+
+servers:
+  - url: http://localhost:8000
+    description: Development server
+  - url: https://api.tudominio.com
+    description: Production server
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Sistema operativo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+                  version:
+                    type: string
+
+  /auth/login:
+    post:
+      summary: Login y obtener JWT
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: admin
+                password:
+                  type: string
+                  example: admin123
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                  expires_in:
+                    type: integer
+        '401':
+          description: Credenciales inválidas
+
+  /admin/articles:
+    get:
+      summary: Listar artículos generados
+      tags:
+        - Articles
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status_filter
+          in: query
+          schema:
+            type: string
+            enum: [draft, pending_review, published]
+        - name: skip
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 100
+      responses:
+        '200':
+          description: Lista de artículos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Article'
+        '401':
+          description: Token inválido o expirado
+
+  /admin/articles/{id}:
+    get:
+      summary: Obtener artículo específico
+      tags:
+        - Articles
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Artículo encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Article'
+        '404':
+          description: Artículo no encontrado
+
+    put:
+      summary: Editar artículo (borrador)
+      tags:
+        - Articles
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                seo_meta:
+                  type: object
+                  properties:
+                    meta_title:
+                      type: string
+                    meta_description:
+                      type: string
+                    keywords:
+                      type: array
+                      items:
+                        type: string
+              required:
+                - title
+                - description
+      responses:
+        '200':
+          description: Artículo actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Article'
+        '400':
+          description: No se puede editar artículo publicado
+
+  /admin/articles/{id}/publish:
+    post:
+      summary: Publicar artículo en WordPress
+      tags:
+        - Articles
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Artículo publicado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  wp_post_id:
+                    type: string
+                  message:
+                    type: string
+        '404':
+          description: Artículo no encontrado
+        '500':
+          description: Error publicando
+
+  /admin/templates:
+    post:
+      summary: Crear plantilla de scraping
+      tags:
+        - Templates
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                domain:
+                  type: string
+                  example: bbc.com
+                selectors:
+                  type: object
+                  properties:
+                    title:
+                      type: string
+                    body:
+                      type: string
+                    image:
+                      type: string
+                    context:
+                      type: string
+                rules:
+                  type: object
+                version:
+                  type: string
+                  default: "1.0"
+              required:
+                - domain
+                - selectors
+      responses:
+        '200':
+          description: Plantilla creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          description: Dominio ya existe
+
+    get:
+      summary: Listar plantillas de scraping
+      tags:
+        - Templates
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de plantillas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Template'
+
+  /admin/templates/{id}:
+    get:
+      summary: Obtener plantilla específica
+      tags:
+        - Templates
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Plantilla encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+
+    put:
+      summary: Actualizar plantilla
+      tags:
+        - Templates
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                selectors:
+                  type: object
+                rules:
+                  type: object
+                version:
+                  type: string
+                active:
+                  type: string
+      responses:
+        '200':
+          description: Plantilla actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+
+    delete:
+      summary: Eliminar plantilla
+      tags:
+        - Templates
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Plantilla eliminada
+
+  /admin/templates/{id}/test:
+    post:
+      summary: Probar plantilla contra URL
+      tags:
+        - Templates
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+      responses:
+        '200':
+          description: Test completado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+
+  /admin/scrape/run:
+    post:
+      summary: Ejecutar scraping manual
+      tags:
+        - Scraping
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Scraping iniciado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+
+components:
+  schemas:
+    Article:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [draft, pending_review, published]
+        image_url:
+          type: string
+          nullable: true
+        seo_meta:
+          type: object
+          nullable: true
+          properties:
+            meta_title:
+              type: string
+            meta_description:
+              type: string
+            keywords:
+              type: array
+              items:
+                type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        domain:
+          type: string
+        selectors:
+          type: object
+        rules:
+          type: object
+          nullable: true
+        version:
+          type: string
+        active:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+tags:
+  - name: Health
+    description: Estado del sistema
+  - name: Auth
+    description: Autenticación y JWT
+  - name: Articles
+    description: Gestión de artículos generados
+  - name: Templates
+    description: Plantillas de scraping
+  - name: Scraping
+    description: Control de scraping

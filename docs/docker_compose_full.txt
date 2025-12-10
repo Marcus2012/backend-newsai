@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # PostgreSQL via Neon
+  postgres:
+    image: postgres:16-alpine
+    container_name: news_ai_db
+    environment:
+      POSTGRES_USER: news_user
+      POSTGRES_PASSWORD: news_password
+      POSTGRES_DB: news_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U news_user -d news_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - news_ai_network
+
+  # ScrapeGraphAI (Open-source self-hosted)
+  scrapegraph:
+    image: scrapegraph/scrapegraph-ai:latest
+    container_name: news_ai_scraper
+    environment:
+      LOG_LEVEL: INFO
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - news_ai_network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: news_ai_backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://news_user:news_password@postgres:5432/news_ai
+      SCRAPEGRAPH_ENDPOINT: http://scrapegraph:8000/api/scrape
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-prod}
+      WP_GRAPHQL_ENDPOINT: ${WP_GRAPHQL_ENDPOINT}
+      WP_AUTH_TOKEN: ${WP_AUTH_TOKEN}
+      SCRAPE_URLS: https://www.bbc.com/news,https://www.elcomercio.pe,https://www.rpp.pe
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      scrapegraph:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - news_ai_network
+
+  # Angular Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: news_ai_frontend
+    environment:
+      API_URL: http://backend:8000
+      NODE_ENV: production
+    ports:
+      - "4200:4200"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+    networks:
+      - news_ai_network
+
+  # Redis (opcional, para Celery si usas)
+  redis:
+    image: redis:7-alpine
+    container_name: news_ai_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - news_ai_network
+
+volumes:
+  postgres_data:
+
+networks:
+  news_ai_network:
+    driver: bridge

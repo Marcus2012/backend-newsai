@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  scrapegraph:
+    image: scrapegraph/scrapegraph-ai:latest
+    container_name: news_ai_scraper
+    ports:
+      - "8001:8000"
+    environment:
+      LOG_LEVEL: INFO

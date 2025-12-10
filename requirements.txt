@@ -1,0 +1,37 @@
+# News AI Generator - Backend Dependencies
+
+# Web Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# Database
+sqlalchemy[asyncio]>=2.0.25
+aiomysql>=0.2.0
+pymysql>=1.1.0
+cryptography>=42.0.0
+
+# Configuration
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Authentication
+PyJWT>=2.0.0
+
+# HTTP Client
+aiohttp>=3.9.0
+
+# AI Services
+google-generativeai>=0.3.0
+scrapegraphai>=0.1.0
+playwright>=1.40.0
+groq>=0.4.0
+
+# Scheduler
+APScheduler>=3.10.0
+
+# Development
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+httpx>=0.26.0
