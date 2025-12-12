@@ -1,18 +1,16 @@
 """
-ScrapeGraph Service - Web scraping using ScrapeGraphAI (Local Library)
+ScrapeGraph Service - Web scraping using Playwright + Gemini
 """
 import asyncio
 import json
 from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 from app.core.config import settings
+import google.generativeai as genai
+from playwright.async_api import async_playwright
 
-try:
-    from scrapegraphai.graphs import SmartScraperGraph
-    HAS_SCRAPEGRAPH = True
-except ImportError:
-    HAS_SCRAPEGRAPH = False
-    print("⚠️ ScrapeGraphAI library not found. Please install it: pip install scrapegraphai playwright && playwright install")
+# Configure Gemini
+genai.configure(api_key=settings.GEMINI_API_KEY)
 
 async def scrape_url(
     url: str,
@@ -20,92 +18,105 @@ async def scrape_url(
     scraping_type: str = "list"
 ) -> Dict[str, Any]:
     """
-    Scrape a URL using ScrapeGraphAI library locally
+    Scrape a URL using Playwright + Gemini (Custom implementation)
     
     Args:
         url: URL to scrape
         template: Optional template
         scraping_type: "list" for section pages, "article" for detail pages
     """
-    if not HAS_SCRAPEGRAPH:
-        print("⚠️ Using MOCK data because ScrapeGraphAI is not installed.")
+    print(f"--- Scraping {url} ({scraping_type}) ---")
+    
+    # 1. Fetch HTML content using Playwright
+    html_content = ""
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            # Create a new context with a user agent to avoid blocking
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            )
+            page = await context.new_page()
+            try:
+                await page.goto(url, timeout=60000, wait_until="domcontentloaded")
+                # Wait a bit for dynamic content
+                await page.wait_for_timeout(2000)
+                
+                # Clean HTML to reduce tokens (remove scripts, styles, svgs)
+                html_content = await page.evaluate("""() => {
+                    const elements = document.querySelectorAll('script, style, noscript, iframe, svg, link[rel="stylesheet"]');
+                    elements.forEach(el => el.remove());
+                    return document.body.innerHTML;
+                }""")
+            except Exception as e:
+                print(f"❌ Playwright Error: {e}")
+                return _get_mock_data(url)
+            finally:
+                await browser.close()
+    except Exception as e:
+        print(f"❌ Browser Error: {e}")
         return _get_mock_data(url)
 
-    # Configuración para ScrapeGraphAI
-    graph_config = {
-        "llm": {
-            "api_key": settings.GROQ_API_KEY,
-            "model": f"groq/{settings.GROQ_MODEL}",
-        },
-        "verbose": True,
-        "headless": True,
-    }
+    if not html_content:
+        return _get_mock_data(url)
 
-    if scraping_type == "list":
-        prompt = """
-        Extract a list of the top 10 news articles from the page.
-        For each article, extract:
-        - title: The headline.
-        - url: The absolute link to the article.
-        - summary: A brief summary or context.
-        - image_url: The URL of the image displayed with the article. Look for 'src', 'data-src', or 'srcset' attributes. Ensure it is the direct link to the image file.
-
-        Return the result as a JSON object with a key 'articles' which is a list of these objects.
-        """
-    else:
-        # Prompt detallado para artículos individuales
-        prompt = """
-        Extract the full content of the news article.
-        Fields to extract:
-        - title: The main headline.
-        - body: The full article text. IMPORTANT: Preserve all content including:
-            - Standard paragraphs.
-            - Quotes and statements (e.g., "Yo soy de Alianza...").
-            - Data tables or statistics (format them as readable text or markdown tables).
-            - Exclude ads, "Read also" links, and navigation menus.
-        - image_url: The main featured image URL (high quality). Look for 'src', 'data-src', or 'srcset'.
-        - summary: A brief summary (2-3 sentences).
-        
-        Return the result as a JSON object with keys: title, body, image_url, summary.
-        """
-
-    loop = asyncio.get_event_loop()
-    
-    def run_scraper():
-        try:
-            smart_scraper_graph = SmartScraperGraph(
-                prompt=prompt,
-                source=url,
-                config=graph_config
-            )
-            return smart_scraper_graph.run()
-        except Exception as e:
-            print(f"❌ ScrapeGraphAI Error: {e}")
-            raise e
-
+    # 2. Process with Gemini
     try:
-        # Ejecutar en un thread aparte para no bloquear
-        result = await loop.run_in_executor(None, run_scraper)
-        
-        # Si el resultado es un string JSON, parsearlo
-        if isinstance(result, str):
-            try:
-                result = json.loads(result)
-            except:
-                pass
+        # Use gemini-pro for better compatibility
+        model = genai.GenerativeModel('gemini-pro') 
         
         if scraping_type == "list":
-            # Normalizar resultado lista
+            prompt = """
+            You are an expert web scraper. Extract a list of the top 10 news articles from the provided HTML.
+            Return a JSON object with a key 'articles' containing a list of objects.
+            
+            For each article extract:
+            - title: The headline.
+            - url: The absolute link to the article. (If relative, prepend the base domain).
+            - summary: A brief summary.
+            - image_url: The URL of the image.
+            
+            HTML Content:
+            """
+        else:
+            prompt = """
+            You are an expert web scraper. Extract the full content of the news article from the provided HTML.
+            Return a JSON object with keys: title, body, image_url, summary.
+            
+            Fields:
+            - title: Main headline.
+            - body: Full article text, preserving paragraphs and quotes. Exclude ads/menus.
+            - image_url: Main article image.
+            - summary: Brief summary.
+            
+            HTML Content:
+            """
+            
+        # Truncate HTML if necessary (Gemini 1.5 Flash has 1M context, so usually fine, but let's be safe)
+        prompt_content = f"{prompt}\n\n{html_content[:200000]}"
+        
+        response = await model.generate_content_async(
+            prompt_content,
+            generation_config={"response_mime_type": "application/json"}
+        )
+        
+        result_text = response.text
+        result = json.loads(result_text)
+        
+        if scraping_type == "list":
             articles = result.get("articles", [])
-            if not articles and "title" in result:
-                articles = [result]
+            # Fix relative URLs if needed (basic check)
+            base_domain = "/".join(url.split("/")[:3])
+            for art in articles:
+                if art.get("url") and art.get("url").startswith("/"):
+                    art["url"] = base_domain + art["url"]
+                    
             return {
                 "articles": articles,
                 "raw_json": result,
                 "success": True
             }
         else:
-            # Normalizar resultado artículo
             return {
                 "title": result.get("title", ""),
                 "body": result.get("body", ""),
@@ -114,10 +125,9 @@ async def scrape_url(
                 "raw_json": result,
                 "success": True
             }
-    
+
     except Exception as e:
-        print(f"⚠️ Error scraping {url}: {e}")
-        print("⚠️ Using MOCK data for testing purposes.")
+        print(f"❌ Gemini Error: {e}")
         return _get_mock_data(url)
 
 def _get_mock_data(url: str) -> Dict[str, Any]:

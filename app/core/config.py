@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    # Preferred Gemini model (can be overridden in .env)
+    GEMINI_MODEL: str = "gemini-2.5-pro"
     SCRAPEGRAPH_ENDPOINT: str = "http://localhost:8001/api/scrape"
     
     # WordPress
