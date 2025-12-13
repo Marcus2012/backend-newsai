@@ -23,8 +23,11 @@ def _list_available_models() -> list:
             # try attribute access
             if hasattr(resp, "models"):
                 return [m.name for m in resp.models if hasattr(m, "name")]
-            # fallback: try to iterate
-            return list(resp)
+            # fallback: try to iterate and stringify entries
+            try:
+                return [getattr(m, "name", None) or str(m) for m in resp]
+            except Exception:
+                return []
     except Exception:
         return []
 
@@ -34,17 +37,34 @@ def _choose_model() -> str:
     preferred = getattr(settings, "GEMINI_MODEL", None) or None
     available = _list_available_models()
 
-    if preferred and (not available or preferred in available):
+    # If preferred is explicitly available, use it
+    if preferred and preferred in available:
         return preferred
+
+    # If preferred is provided without the 'models/' prefix, try the full name
+    if preferred and preferred.startswith("models/") is False:
+        maybe_full = f"models/{preferred}"
+        if maybe_full in available:
+            return maybe_full
 
     # common candidates (order of preference)
     candidates = ["gemini-2.5-pro", "gemini-1.5", "gemini-1.5-pro", "gemini-pro", "gemini-1.0"]
     for c in candidates:
+        # check both raw and namespaced forms
         if c in available:
             return c
+        namespaced = f"models/{c}"
+        if namespaced in available:
+            return namespaced
 
-    # fallback to preferred or a safe default
-    return preferred or "gemini-1.0"
+    # fallback to preferred (as-is) or a safe namespaced default if possible
+    if preferred:
+        return preferred
+    # try a common namespaced default
+    for fallback in ["models/gemini-2.5-pro", "models/gemini-2.5-flash", "models/gemini-1.0"]:
+        if fallback in available:
+            return fallback
+    return "gemini-1.0"
 
 
 def _local_fallback_generation(context: str, raw_title: Optional[str] = None) -> dict:

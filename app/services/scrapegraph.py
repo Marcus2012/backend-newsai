@@ -7,6 +7,8 @@ from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 from app.core.config import settings
 import google.generativeai as genai
+# reuse model selection logic from gemini service
+from app.services.gemini import _choose_model
 from playwright.async_api import async_playwright
 
 # Configure Gemini
@@ -62,8 +64,10 @@ async def scrape_url(
 
     # 2. Process with Gemini
     try:
-        # Use gemini-pro for better compatibility
-        model = genai.GenerativeModel('gemini-pro') 
+        # Choose a model using the centralized selector (may return namespaced 'models/..')
+        model_name = _choose_model()
+        print(f"Using Gemini model: {model_name}")
+        model = genai.GenerativeModel(model_name)
         
         if scraping_type == "list":
             prompt = """

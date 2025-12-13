@@ -4,6 +4,8 @@ Scheduler - Automated scraping jobs using APScheduler
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime
+from urllib.parse import urljoin, urlparse, urlunparse
+import re
 from sqlalchemy import select
 import asyncio
 
@@ -62,18 +64,31 @@ async def scraping_job():
                         print(f"  ⚠️ No se encontraron artículos en {url}")
                         continue
 
-                    # Limit to 10 articles
+                    # Limit to 5 articles (reduce LLM calls / quota usage)
                     count = 0
-                    for article in articles[:10]:
+                    for article in articles[:5]:
                         article_url = article.get("url")
                         if not article_url:
                             continue
+
+                        # Normalize relative URLs and remove duplicated slashes in path
+                        try:
+                            # Resolve relative URLs against the list page
+                            article_url = urljoin(url, article_url)
+                            parsed = urlparse(article_url)
+                            # Collapse multiple slashes in path (but preserve leading slash)
+                            normalized_path = re.sub(r'/+', '/', parsed.path)
+                            parsed = parsed._replace(path=normalized_path)
+                            article_url = urlunparse(parsed)
+                        except Exception:
+                            # keep original if normalization fails
+                            pass
                             
                         # Scrape Detail (Article Mode)
                         print(f"    Scrapeando detalle: {article.get('title')[:30]}...")
                         try:
-                            # Add delay to avoid Rate Limit (TPM)
-                            await asyncio.sleep(10)
+                            # Add larger delay to avoid Rate Limit (TPM)
+                            await asyncio.sleep(20)
                             
                             detail_data = await scrape_url(article_url, scraping_type="article")
                             
