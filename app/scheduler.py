@@ -11,7 +11,7 @@ import asyncio
 
 from app.core.config import settings
 from app.core.database import async_session
-from app.core.models import RawArticle, GeneratedArticle, ScraperTemplate
+from app.core.models import RawArticle, GeneratedArticle, ScraperTemplate, StatusEnum
 from app.services.scrapegraph import scrape_url
 from app.services.gemini import generate_article
 
@@ -87,8 +87,8 @@ async def scraping_job():
                         # Scrape Detail (Article Mode)
                         print(f"    Scrapeando detalle: {article.get('title')[:30]}...")
                         try:
-                            # Add larger delay to avoid Rate Limit (TPM)
-                            await asyncio.sleep(20)
+                            # Small delay to avoid rate limits but keep flow fast
+                            await asyncio.sleep(3)
                             
                             detail_data = await scrape_url(article_url, scraping_type="article")
                             
@@ -99,7 +99,7 @@ async def scraping_job():
                                 source=url.split('/')[2],
                                 source_url=article_url,
                                 scraped_title=detail_data.get("title") or article.get("title"),
-                                scraped_body=detail_data.get("body"), # Full body from detail
+                                scraped_body=detail_data.get("body"),  # Full body from detail
                                 image_url=img_url,
                                 context=detail_data.get("summary") or article.get("summary"),
                                 raw_json=detail_data.get("raw_json"),
@@ -109,6 +109,60 @@ async def scraping_job():
                             )
                             
                             db.add(raw_article)
+                            # Flush to assign primary key before creating generated article
+                            try:
+                                await db.flush()
+                            except Exception as flush_error:
+                                await db.rollback()
+                                print(f"      ❌ Error preparando RawArticle: {flush_error}")
+                                continue
+
+                            # Generate AI article linked to the raw scrape so the UI can display it
+                            try:
+                                generation_context = (
+                                    detail_data.get("summary")
+                                    or detail_data.get("body")
+                                    or article.get("summary")
+                                    or ""
+                                )
+                                ai_article = await generate_article(
+                                    generation_context,
+                                    raw_title=detail_data.get("title") or article.get("title")
+                                )
+                                generated_article = GeneratedArticle(
+                                    raw_article_id=raw_article.id,
+                                    title=ai_article.get("title") or raw_article.scraped_title or "Sin título",
+                                    description=ai_article.get("description") or generation_context,
+                                    seo_meta=ai_article.get("seo"),
+                                    image_url=img_url,
+                                    status=StatusEnum.draft
+                                )
+                            except Exception as e:
+                                print(f"      ⚠️ Error generando artículo IA: {e}")
+                                # Fallback: create a minimal generated article so UI still shows the item
+                                fallback_description = (
+                                    (detail_data.get("summary") or "")
+                                    or (detail_data.get("body") or "")[:280]
+                                    or (article.get("summary") or "")
+                                )
+                                generated_article = GeneratedArticle(
+                                    raw_article_id=raw_article.id,
+                                    title=raw_article.scraped_title or article.get("title") or "Sin título",
+                                    description=fallback_description,
+                                    seo_meta=None,
+                                    image_url=img_url,
+                                    status=StatusEnum.draft
+                                )
+                            db.add(generated_article)
+
+                            # Persist each article immediately so UI sees results even if job stops later
+                            try:
+                                await db.commit()
+                            except Exception as commit_error:
+                                await db.rollback()
+                                print(f"      ❌ Error guardando en BD: {commit_error}")
+                                continue
+
                             count += 1
                             print(f"      ✅ Guardado [Img: {'✅' if img_url else '❌'}]")
                         
@@ -124,7 +178,11 @@ async def scraping_job():
                 except Exception as e:
                     print(f"  ❌ Error en {url}: {str(e)}")
             
-            await db.commit()
+            # Final commit not strictly needed (per-article commits above), but keep for safety
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
             print(f"[{datetime.now()}] Scraping completado")
         
         except Exception as e:

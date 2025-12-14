@@ -1,0 +1,119 @@
+"""
+Football Router - FootyStats proxy endpoints
+"""
+from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Any, Dict, Optional
+
+from app.services import footystats
+from app.utils.auth import get_current_user
+from app.core.config import settings
+
+router = APIRouter()
+
+
+@router.get("/presets", summary="List preset leagues")
+async def list_presets(current_user: str = Depends(get_current_user)) -> Dict[str, Any]:
+    presets = settings.footystats_presets
+    return {"presets": presets}
+
+
+@router.get("/leagues", summary="League list")
+async def league_list(current_user: str = Depends(get_current_user)) -> Dict[str, Any]:
+    return await footystats.get_league_list()
+
+
+@router.get("/seasons/{season_id}", summary="League season stats")
+async def league_season(
+    season_id: int,
+    current_user: str = Depends(get_current_user)
+):
+    return await footystats.get_league_season(season_id=season_id)
+
+
+@router.get("/seasons/{season_id}/teams", summary="Teams in a season")
+async def league_teams(
+    season_id: int,
+    include: Optional[str] = Query("stats", description="Optional include flag, e.g. 'stats'"),
+    current_user: str = Depends(get_current_user)
+):
+    return await footystats.get_league_teams(season_id=season_id, include=include)
+
+
+@router.get("/presets/{alias}/standings", summary="Standings for preset league")
+async def get_preset_standings(
+    alias: str,
+    season: Optional[int] = Query(None, description="Season year, e.g. 2024"),
+    season_id: Optional[int] = Query(None, description="FootyStats season_id override"),
+    current_user: str = Depends(get_current_user)
+):
+    preset = footystats.get_preset_league(alias)
+    if not preset:
+        raise HTTPException(status_code=404, detail="Preset no encontrado")
+
+    league_id = preset.get("league_id")
+    preset_season = season or preset.get("season")
+    preset_season_id = season_id or preset.get("season_id")
+
+    if not league_id and not preset_season_id:
+        raise HTTPException(status_code=400, detail="Preset requiere league_id o season_id")
+
+    return await footystats.get_league(
+        league_id=league_id,
+        season=preset_season,
+        season_id=preset_season_id,
+    )
+
+
+@router.get("/leagues/{league_id}/standings", summary="League standings")
+async def league_standings(
+    league_id: int,
+    season: Optional[int] = Query(None, description="Season year, e.g. 2024"),
+    season_id: Optional[int] = Query(None, description="FootyStats season_id"),
+    current_user: str = Depends(get_current_user)
+):
+    return await footystats.get_league(league_id=league_id, season=season, season_id=season_id)
+
+
+@router.get("/leagues/{league_id}/fixtures", summary="League fixtures")
+async def league_fixtures(
+    league_id: int,
+    season: Optional[int] = Query(None, description="Season year"),
+    season_id: Optional[int] = Query(None, description="FootyStats season_id"),
+    date_from: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    date_to: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+    page: Optional[int] = Query(None, description="Pagination page if supported"),
+    current_user: str = Depends(get_current_user)
+):
+    return await footystats.get_matches(
+        league_id=league_id,
+        season=season,
+        season_id=season_id,
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+    )
+
+
+@router.get("/leagues/{league_id}/top-scorers", summary="Top scorers")
+async def league_top_scorers(
+    league_id: int,
+    season: Optional[int] = Query(None, description="Season year"),
+    current_user: str = Depends(get_current_user)
+):
+    return await footystats.get_top_scorers(league_id=league_id, season=season)
+
+
+@router.get("/matches/{match_id}", summary="Match details")
+async def match_detail(
+    match_id: int,
+    current_user: str = Depends(get_current_user)
+):
+    return await footystats.get_match(match_id=match_id)
+
+
+@router.get("/teams/{team_id}", summary="Team details")
+async def team_detail(
+    team_id: int,
+    current_user: str = Depends(get_current_user)
+):
+    return await footystats.get_team(team_id=team_id)

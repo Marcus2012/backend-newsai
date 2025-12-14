@@ -131,6 +131,10 @@ docker run -d -p 8000:8000 --env-file .env newsai-backend
 | `PUT` | `/admin/templates/{id}` | Actualizar plantilla |
 | `DELETE` | `/admin/templates/{id}` | Eliminar plantilla |
 | `POST` | `/admin/templates/{id}/test` | Probar plantilla |
+| `GET` | `/football/presets` | Listar ligas preconfiguradas (ej. Perú Liga 1) |
+| `GET` | `/football/presets/{alias}/standings` | Tabla de posiciones usando preset |
+| `GET` | `/football/leagues/{league_id}/fixtures` | Partidos por liga/temporada |
+| `GET` | `/football/leagues/{league_id}/top-scorers` | Goleadores por liga |
 | `GET` | `/health` | Health check |
 
 ## ⚙️ Variables de Entorno
@@ -143,6 +147,9 @@ docker run -d -p 8000:8000 --env-file .env newsai-backend
 | `WP_GRAPHQL_ENDPOINT` | URL GraphQL de WordPress | `https://site.com/graphql` |
 | `WP_AUTH_TOKEN` | Token JWT de WordPress | `eyJ...` |
 | `SCRAPE_URLS` | URLs a scrapear (separadas por coma) | `https://bbc.com,https://rpp.pe` |
+| `FOOTYSTATS_API_KEY` | API Key de FootyStats | `tu-api-key` |
+| `FOOTYSTATS_BASE_URL` | Base URL FootyStats | `https://www.footystats.org/api/` |
+| `FOOTYSTATS_PRESET_LEAGUES` | JSON con ligas alias->league_id o season_id | `{"peru_primera":{"season_id":14912,"season":2025},"peru_segunda":{"season_id":16183,"season":2025}}` |
 
 ## 🧪 Testing
 

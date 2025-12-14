@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     # Preferred Gemini model (can be overridden in .env)
     GEMINI_MODEL: str = "gemini-2.5-pro"
     SCRAPEGRAPH_ENDPOINT: str = "http://localhost:8001/api/scrape"
+
+    # FootyStats API
+    FOOTYSTATS_API_KEY: str = "f37d0d7b03a98882d9a3672336c2a30d89ade024875637d35b5cd5f224149d0e"
+    FOOTYSTATS_BASE_URL: str = "https://api.football-data-api.com"
+    # Optional JSON mapping of preset leagues, e.g. {"peru_liga1": {"league_id": 3439, "season": 2024}}
+    FOOTYSTATS_PRESET_LEAGUES: str = ""
     
     # WordPress
     WP_GRAPHQL_ENDPOINT: str = "https://example.com/graphql"
@@ -51,6 +57,19 @@ class Settings(BaseSettings):
         if self.CORS_ORIGINS == "*":
             return ["*"]
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def footystats_presets(self) -> dict:
+        """Return preset leagues mapping as dict"""
+        import json
+
+        raw = (self.FOOTYSTATS_PRESET_LEAGUES or "").strip()
+        if not raw:
+            return {}
+        try:
+            return json.loads(raw)
+        except Exception:
+            return {}
     
     class Config:
         env_file = ".env"

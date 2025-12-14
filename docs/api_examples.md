@@ -564,4 +564,30 @@ echo "✓ Publicado en WordPress con ID: $WP_ID"
 
 ---
 
+## ⚽ FootyStats (Fútbol)
+
+### 1. Listar ligas preconfiguradas
+
+```bash
+curl -X GET "http://localhost:8000/football/presets" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### 2. Tabla de posiciones (preset Perú Liga 1)
+
+```bash
+curl -X GET "http://localhost:8000/football/presets/peru_liga1/standings" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### 3. Fixtures de una liga específica (ej. Premier League)
+
+```bash
+LEAGUE_ID=1963   # ejemplo, reemplaza con el id real
+curl -X GET "http://localhost:8000/football/leagues/$LEAGUE_ID/fixtures?season=2024" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
 **¡Listo para hacer requests contra la API!** 🚀
