@@ -1,0 +1,82 @@
+# Google Cloud Build Configuration
+# Deploys to Cloud Run automatically on push to main branch
+# Documentation: https://cloud.google.com/build/docs
+
+steps:
+  # Step 1: Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/newsai-backend:$SHORT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/newsai-backend:latest'
+      - '.'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=us-central1'
+
+  # Step 2: Push the image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-image'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/newsai-backend:$SHORT_SHA'
+    waitFor: ['build-image']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-latest'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/newsai-backend:latest'
+    waitFor: ['build-image']
+
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    id: 'deploy'
+    args:
+      - 'run'
+      - '--filename=.'
+      - '--image=gcr.io/$PROJECT_ID/newsai-backend:$SHORT_SHA'
+      - '--location=us-central1'
+      - '--namespace=default'
+    waitFor: ['push-image']
+
+  # Step 4: Deploy using gcloud run deploy
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deploy-cloud-run'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'newsai-backend'
+      - '--image=gcr.io/$PROJECT_ID/newsai-backend:$SHORT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--memory=1Gi'
+      - '--cpu=2'
+      - '--timeout=3600'
+      - '--max-instances=100'
+      - '--min-instances=1'
+      - '--concurrency=80'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=PYTHONUNBUFFERED=1'
+      - '--update-secrets=DATABASE_URL=DATABASE_URL:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,GROQ_API_KEY=GROQ_API_KEY:latest,SECRET_KEY=SECRET_KEY:latest,WP_AUTH_TOKEN=WP_AUTH_TOKEN:latest,FOOTYSTATS_API_KEY=FOOTYSTATS_API_KEY:latest'
+    waitFor: ['push-latest']
+
+# Images to be pushed to the registry
+images:
+  - 'gcr.io/$PROJECT_ID/newsai-backend:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/newsai-backend:latest'
+
+# Build options
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+  
+# Timeout for the build
+timeout: '1800s'
+
+# Trigger settings (configure in Cloud Build UI)
+# This will run on:
+# - Pushes to 'main' branch
+# - Pull requests to 'main' branch (optional)
