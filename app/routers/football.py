@@ -1,10 +1,11 @@
 """
 Football Router - FootyStats proxy endpoints
 """
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Any, Dict, Optional
 
-from app.services import footystats
+from app.services import footystats, football_ai
 from app.utils.auth import get_current_user
 from app.core.config import settings
 
@@ -94,6 +95,57 @@ async def league_fixtures(
     )
 
 
+@router.get("/fixtures/upcoming", summary="Upcoming fixtures for a league")
+async def upcoming_fixtures(
+    league_id: Optional[int] = Query(None, description="League id from FootyStats"),
+    season: Optional[int] = Query(None, description="Season year"),
+    season_id: Optional[int] = Query(None, description="FootyStats season_id"),
+    days_ahead: int = Query(7, ge=1, le=60, description="How many days ahead to look"),
+    limit: int = Query(10, ge=1, le=50, description="How many matches to return"),
+    current_user: str = Depends(get_current_user)
+):
+    today = datetime.utcnow().date()
+    date_from = today.isoformat()
+    date_to = (today + timedelta(days=days_ahead)).isoformat()
+
+    raw = await footystats.get_matches(
+        league_id=league_id,
+        season=season,
+        season_id=season_id,
+        date_from=date_from,
+        date_to=date_to,
+        page=None,
+    )
+
+    def _extract_matches(payload: Any):
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict):
+            for key in ("data", "matches", "fixtures", "items"):
+                value = payload.get(key)
+                if isinstance(value, list):
+                    return value
+        return []
+
+    matches = _extract_matches(raw)
+
+    def _sort_key(match: Dict[str, Any]):
+        date_value = match.get("date") or match.get("match_date") or match.get("iso_date")
+        try:
+            return datetime.fromisoformat(str(date_value))
+        except Exception:
+            return datetime.max
+
+    sorted_matches = sorted(matches, key=_sort_key)[:limit]
+
+    return {
+        "date_from": date_from,
+        "date_to": date_to,
+        "count": len(sorted_matches),
+        "items": sorted_matches,
+    }
+
+
 @router.get("/leagues/{league_id}/top-scorers", summary="Top scorers")
 async def league_top_scorers(
     league_id: int,
@@ -117,3 +169,21 @@ async def team_detail(
     current_user: str = Depends(get_current_user)
 ):
     return await footystats.get_team(team_id=team_id)
+
+
+@router.post("/matches/{match_id}/predict", summary="AI prediction for a match")
+async def predict_match(
+    match_id: int,
+    current_user: str = Depends(get_current_user)
+):
+    match = await footystats.get_match(match_id=match_id)
+    try:
+        prediction = await football_ai.predict_match(match)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {
+        "match_id": match_id,
+        "match": match,
+        "prediction": prediction,
+    }
