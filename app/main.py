@@ -52,21 +52,19 @@ app = FastAPI(
 )
 
 # CORS Configuration
+# Define allowed origins for different environments
+cors_origins = [
+    "http://localhost:3000",                     # Local development
+    "https://newsai-predictorfutbol.vercel.app", # Production Vercel
+]
+
 app.add_middleware(
     CORSMiddleware,
-    # Restrict to known frontends; add more origins here if needed
-    allow_origins=[
-        "http://localhost:4200",
-        "http://127.0.0.1:4200",
-        "http://localhost:3000",  # Next.js frontend
-        "http://localhost:5173",  # Vite
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-        "https://newsai-predictorfutbol.vercel.app"
-    ],
+    allow_origins=cors_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",  # Allow all Vercel preview deployments
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],                         # Include OPTIONS
+    allow_headers=["*"],                         # Include Authorization, Content-Type
 )
 
 # Register Routers
