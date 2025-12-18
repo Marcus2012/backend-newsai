@@ -31,18 +31,7 @@ steps:
       - 'gcr.io/$PROJECT_ID/newsai-backend:latest'
     waitFor: ['build-image']
 
-  # Step 3: Deploy to Cloud Run
-  - name: 'gcr.io/cloud-builders/gke-deploy'
-    id: 'deploy'
-    args:
-      - 'run'
-      - '--filename=.'
-      - '--image=gcr.io/$PROJECT_ID/newsai-backend:$SHORT_SHA'
-      - '--location=us-central1'
-      - '--namespace=default'
-    waitFor: ['push-image']
-
-  # Step 4: Deploy using gcloud run deploy
+  # Step 3: Deploy using gcloud run deploy
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'deploy-cloud-run'
     args:
