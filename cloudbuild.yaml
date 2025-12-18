@@ -49,6 +49,8 @@ steps:
       - '--concurrency=80'
       - '--allow-unauthenticated'
       - '--set-env-vars=PYTHONUNBUFFERED=1'
+      - '--health-check-path=/health'
+      - '--startup-probe-initial-delay=60'
       - '--update-secrets=DATABASE_URL=DATABASE_URL:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,GROQ_API_KEY=GROQ_API_KEY:latest,SECRET_KEY=SECRET_KEY:latest,WP_AUTH_TOKEN=WP_AUTH_TOKEN:latest,FOOTYSTATS_API_KEY=FOOTYSTATS_API_KEY:latest'
     waitFor: ['push-latest']
 

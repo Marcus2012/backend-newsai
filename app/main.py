@@ -24,9 +24,20 @@ from app.scheduler import start_scheduler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown events"""
-    # Startup
-    await init_db()
-    start_scheduler()
+    # Startup - Initialize database asynchronously
+    try:
+        await init_db()
+        print("✅ Base de datos inicializada")
+    except Exception as e:
+        print(f"⚠️ Error inicializando DB (continuando): {e}")
+    
+    # Start scheduler without blocking
+    try:
+        start_scheduler()
+        print("✅ Scheduler iniciado")
+    except Exception as e:
+        print(f"⚠️ Error iniciando scheduler: {e}")
+    
     print("✅ Sistema iniciado")
     yield
     # Shutdown
