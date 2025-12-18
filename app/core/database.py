@@ -5,8 +5,12 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.pool import NullPool
 import ssl
 
+
 from app.core.config import settings
 from app.core.models import Base
+
+# Mostrar el valor real de DATABASE_URL al arrancar
+print(f"[INFO] DATABASE_URL en runtime: {settings.DATABASE_URL}")
 
 
 # Configurar connect_args según el tipo de base de datos
