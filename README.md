@@ -164,3 +164,4 @@ pytest --cov=app
 ## 📝 Licencia
 
 MIT License
+# Deploy test - Thu 18 Dec 2025 11:09:21 AM -05
