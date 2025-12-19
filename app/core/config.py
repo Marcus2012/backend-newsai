@@ -15,12 +15,14 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     
     # Security
-    SECRET_KEY: str = "your-super-secret-key-change-in-production"
+    SECRET_KEY: str = "uQmKr3Uwvei7nNoHS0cbRMs-0MjbB84dYGqTsDhxf-U6sirvAicrwFGgJ6yXlIuuBZ-5tg-JyCPTLF9h6jGXBg"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost/news_ai"
+    DATABASE_URL: str = "mysql+aiomysql://newsai:Newsai20*2025@/newsai?unix_socket=/cloudsql/asieselfutbol:us-east4:newsai"
+    # Local override for development (socket-based proxy)
+    DATABASE_URL_LOCAL: str = ""
     
     # External Services
     GEMINI_API_KEY: str = ""
