@@ -9,8 +9,6 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/newsai-backend:$SHORT_SHA'
-      - '-t'
       - 'gcr.io/$PROJECT_ID/newsai-backend:latest'
       - '.'
     env:
@@ -21,7 +19,7 @@ steps:
     id: 'push-image'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/newsai-backend:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/newsai-backend:latest'
     waitFor: ['build-image']
 
   - name: 'gcr.io/cloud-builders/docker'
@@ -38,24 +36,23 @@ steps:
       - 'run'
       - 'deploy'
       - 'newsai-backend'
-      - '--image=gcr.io/$PROJECT_ID/newsai-backend:$SHORT_SHA'
-      - '--region=us-central1'
+      - '--image=gcr.io/$PROJECT_ID/newsai-backend:latest'
+      - '--region=us-east4'
       - '--platform=managed'
       - '--memory=1Gi'
       - '--cpu=2'
       - '--timeout=3600'
-      - '--max-instances=100'
+      - '--max-instances=10'
       - '--min-instances=0'
-      - '--concurrency=80'
+      - '--concurrency=10'
       - '--allow-unauthenticated'
-      - '--add-cloudsql-instances=asieselfutbol:us-central1:newsai'
+      - '--add-cloudsql-instances=asieselfutbol:us-east4:newsai'
       - '--set-env-vars=PYTHONUNBUFFERED=1'
       - '--update-secrets=DATABASE_URL=DATABASE_URL:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,GROQ_API_KEY=GROQ_API_KEY:latest,SECRET_KEY=SECRET_KEY:latest,WP_AUTH_TOKEN=WP_AUTH_TOKEN:latest,FOOTYSTATS_API_KEY=FOOTYSTATS_API_KEY:latest'
     waitFor: ['push-latest']
 
 # Images to be pushed to the registry
 images:
-  - 'gcr.io/$PROJECT_ID/newsai-backend:$SHORT_SHA'
   - 'gcr.io/$PROJECT_ID/newsai-backend:latest'
 
 # Build options

@@ -24,9 +24,6 @@ ENV PYTHONUNBUFFERED=1
 # Expose port (Cloud Run expects 8080 by default)
 EXPOSE 8080
 
-# Health check (optional - Cloud Run has built-in health checks)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
-
 # Run the application (Cloud Run compatible configuration)
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Use gunicorn with Uvicorn worker for production; shell form expands `$PORT` at runtime
+CMD python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT

@@ -24,10 +24,8 @@ build/
 *.swo
 *~
 
-# Docker (not needed in Cloud Run)
+# Docker (keep Dockerfile so Cloud Build can use it)
 docker-compose.yml
-Dockerfile
-.dockerignore
 
 # Tests
 tests/
