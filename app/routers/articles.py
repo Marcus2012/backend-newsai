@@ -1,3 +1,6 @@
+
+import os
+import httpx
 """
 Articles Router - CRUD operations for generated articles
 """
@@ -14,8 +17,49 @@ from app.core.models import GeneratedArticle, RawArticle, StatusEnum
 from app.services.wordpress import publish_to_wordpress
 from app.utils.auth import get_current_user
 
-
 router = APIRouter()
+
+# Endpoint para sincronizar artículos a Strapi
+@router.post("/sync-strapi", summary="Sincroniza artículos a Strapi")
+async def sync_strapi_articles(
+    db: AsyncSession = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    """
+    Sincroniza los artículos generados a Strapi CMS usando la API REST de Strapi.
+    """
+    # 1. Obtener los artículos desde la base de datos
+    result = await db.execute(select(GeneratedArticle))
+    articles = result.scalars().all()
+
+    # 2. Configuración de Strapi
+    strapi_url = os.getenv("STRAPI_URL", "http://72.62.83.18:1338/api/articles")
+    strapi_token = os.getenv("STRAPI_TOKEN", "fe81e548eae6af5a3a7157d9bb7ef83dc756396951a865c7c3a8e820ca0afd0766d8c0665db87520cbccf8486415ed0feca20a345372825990a8b4265ceaaf1b6a6810fc24972842e850d7eab0f5938e33bd73bef7d2266d68fd9256eefa4203283b00b83a6e5924695f48492fdfd1e17fce6ef1ddb7aa4152a34fd9616c2bd6")
+
+    headers = {
+        "Authorization": f"Bearer {strapi_token}",
+        "Content-Type": "application/json",
+    }
+
+    results = []
+    async with httpx.AsyncClient() as client:
+        for article in articles:
+            payload = {
+                "data": {
+                    "title": article.title,
+                    "description": article.description,
+                    "seo_meta": article.seo_meta,
+                    "image_url": article.image_url,
+                    "created_at": article.created_at.isoformat() if article.created_at else None,
+                }
+            }
+            resp = await client.post(strapi_url, json=payload, headers=headers)
+            if resp.status_code in (200, 201):
+                results.append({"title": article.title, "status": "ok"})
+            else:
+                results.append({"title": article.title, "status": "error", "detail": resp.text})
+
+    return {"synced": results}
 
 
 class ArticleUpdate(BaseModel):

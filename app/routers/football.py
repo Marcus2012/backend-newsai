@@ -1,3 +1,5 @@
+import os
+
 """
 Football Router - FootyStats proxy endpoints
 """
@@ -6,10 +8,25 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Any, Dict, Optional
 
 from app.services import footystats, football_ai
+import httpx
 from app.utils.auth import get_current_user
 from app.core.config import settings
 
 router = APIRouter()
+
+# Endpoint tabla de posiciones Liga Perú usando API key de settings
+@router.get("/league-table", summary="Tabla de posiciones Liga Perú")
+async def peru_league_table(current_user: str = Depends(get_current_user)):
+    api_key = getattr(settings, "FOOTBALL_DATA_API_KEY", None)
+    if not api_key:
+        # Si no está en settings, usar la key hardcodeada como fallback
+        api_key = "f37d0d7b03a98882d9a3672336c2a30d89ade024875637d35b5cd5f224149d0e"
+    url = f"https://api.football-data-api.com/league-tables?key={api_key}&season_id=14912"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        if response.status_code != 200:
+            raise HTTPException(status_code=502, detail="Error consultando API externa")
+        return response.json()
 
 
 @router.get("/presets", summary="List preset leagues")
