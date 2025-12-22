@@ -1,6 +1,12 @@
 
 import os
+import re
 import httpx
+import logging
+import asyncio
+import time
+from urllib.parse import urlparse
+import httpx as _httpx_exceptions  # alias to reference exceptions in typing
 """
 Articles Router - CRUD operations for generated articles
 """
@@ -19,6 +25,10 @@ from app.utils.auth import get_current_user
 
 router = APIRouter()
 
+# Configurar logger para debugging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("app.routers.articles")
+logger.setLevel(logging.DEBUG)
 # Endpoint para sincronizar artículos a Strapi
 @router.post("/sync-strapi", summary="Sincroniza artículos a Strapi")
 async def sync_strapi_articles(
@@ -35,29 +45,170 @@ async def sync_strapi_articles(
     # 2. Configuración de Strapi
     strapi_url = os.getenv("STRAPI_URL", "http://72.62.83.18:1338/api/articles")
     strapi_token = os.getenv("STRAPI_TOKEN", "fe81e548eae6af5a3a7157d9bb7ef83dc756396951a865c7c3a8e820ca0afd0766d8c0665db87520cbccf8486415ed0feca20a345372825990a8b4265ceaaf1b6a6810fc24972842e850d7eab0f5938e33bd73bef7d2266d68fd9256eefa4203283b00b83a6e5924695f48492fdfd1e17fce6ef1ddb7aa4152a34fd9616c2bd6")
+    # Sanitizar token de posibles saltos de línea o espacios
+    if strapi_token:
+        strapi_token = strapi_token.strip()
+
+    # Logs básicos de configuración (no imprimir token completo en logs)
+    logger.debug("STRAPI_URL=%s", strapi_url)
+    if strapi_token:
+        masked = f"{strapi_token[:6]}...{strapi_token[-6:]}"
+    else:
+        masked = None
+    logger.debug("STRAPI_TOKEN (masked)=%s", masked)
 
     headers = {
         "Authorization": f"Bearer {strapi_token}",
         "Content-Type": "application/json",
     }
 
+    # Log headers con token enmascarado
+    if strapi_token:
+        headers_log = dict(headers)
+        headers_log["Authorization"] = f"Bearer {strapi_token[:6]}...{strapi_token[-6:]}"
+    else:
+        headers_log = headers
+    logger.debug("Headers enviando a Strapi: %s", headers_log)
+
     results = []
-    async with httpx.AsyncClient() as client:
-        for article in articles:
-            payload = {
-                "data": {
-                    "title": article.title,
-                    "description": article.description,
-                    "seo_meta": article.seo_meta,
-                    "image_url": article.image_url,
-                    "created_at": article.created_at.isoformat() if article.created_at else None,
-                }
+    # Configurar timeouts y reintentos
+    timeout = httpx.Timeout(10.0, connect=5.0)
+    max_retries = 3
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        logger.debug("Enviando %d artículos a Strapi", len(articles))
+        async def upload_image_from_url(img_url: str) -> Optional[int]:
+            """Download image from a remote URL and upload to Strapi via /api/upload.
+
+            Returns media id on success or None on failure.
+            """
+            if not img_url:
+                return None
+            try:
+                # fetch image bytes
+                r = await client.get(img_url, timeout=10.0)
+                r.raise_for_status()
+                content = r.content
+                content_type = r.headers.get("content-type", "application/octet-stream")
+                # derive filename from URL path
+                parsed = urlparse(img_url)
+                filename = os.path.basename(parsed.path) or f"image_{int(time.time())}.jpg"
+
+                upload_url = strapi_url.rsplit("/api", 1)[0] + "/api/upload"
+                # For multipart upload remove JSON content-type so httpx sets it correctly
+                upload_headers = dict(headers)
+                upload_headers.pop("Content-Type", None)
+
+                files = [("files", (filename, content, content_type))]
+                resp = await client.post(upload_url, files=files, headers=upload_headers)
+                if resp.status_code in (200, 201):
+                    j = resp.json()
+                    # Strapi returns a list of uploaded files
+                    if isinstance(j, list) and len(j) > 0:
+                        return j[0].get("id")
+                    # older/alternate formats
+                    if isinstance(j, dict) and j.get("data"):
+                        data_obj = j.get("data")
+                        if isinstance(data_obj, list) and len(data_obj) > 0:
+                            return data_obj[0].get("id")
+                logger.debug("Image upload failed status=%s body=%s", resp.status_code, resp.text[:400])
+            except Exception as e:
+                logger.exception("Error uploading image from URL %s: %s", img_url, str(e))
+            return None
+        for idx, article in enumerate(articles, start=1):
+            # generar slug seguro a partir del title
+            def slugify(text: str) -> Optional[str]:
+                if not text:
+                    return None
+                s = text.lower()
+                s = re.sub(r"[^\w\s-]", "", s)
+                s = re.sub(r"[\s_-]+", "-", s).strip("-")
+                return s[:200]
+
+            slug_val = slugify(article.title) or (getattr(article, "id", None) or datetime.utcnow().strftime("%Y%m%d%H%M%S"))
+
+            # Construir payload con campos permitidos por Strapi
+            # Enviar solamente: title, slug, content, excerpt (evitar campos rechazados como documentId/createdAt/seo_meta/image_url)
+            data = {
+                "title": article.title or "",
+                "slug": slug_val,
+                "content": article.description or "",
             }
-            resp = await client.post(strapi_url, json=payload, headers=headers)
+
+            # excerpt: usar meta_description si existe
+            try:
+                seo = getattr(article, "seo_meta", None)
+                if seo and isinstance(seo, dict):
+                    excerpt = seo.get("meta_description") or seo.get("meta_description") or seo.get("metaTitle") or None
+                    if excerpt:
+                        data["excerpt"] = excerpt
+            except Exception:
+                pass
+
+            payload = {"data": data}
+
+            logger.debug("[%d/%d] Enviando artículo title=%s", idx, len(articles), article.title)
+            logger.debug("Payload: %s", payload)
+
+            # Si existe image_url, intentar subirla a Strapi y enlazarla como media
+            try:
+                image_url = getattr(article, "image_url", None)
+                if image_url:
+                    logger.debug("Intentando subir imagen desde URL para title=%s url=%s", article.title, image_url)
+                    media_id = await upload_image_from_url(image_url)
+                    if media_id:
+                        # Asignar el id del media al campo 'image' (campo Media en Strapi)
+                        data["image"] = media_id
+                        payload = {"data": data}
+                        logger.debug("Imagen subida, media_id=%s para title=%s", media_id, article.title)
+                    else:
+                        logger.debug("No se pudo subir la imagen para title=%s; se continuará sin imagen", article.title)
+            except Exception:
+                logger.exception("Error manejando image_url para artículo %s", article.title)
+
+            # Intentar reintentos en caso de timeout/connection errors
+            resp = None
+            for attempt in range(1, max_retries + 1):
+                try:
+                    resp = await client.post(strapi_url, json=payload, headers=headers)
+                    break
+                except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.RequestError) as e:
+                    logger.warning("Attempt %d/%d failed for %s: %s", attempt, max_retries, article.title, str(e))
+                    if attempt < max_retries:
+                        backoff = 2 ** (attempt - 1)
+                        logger.debug("Backoff %s seconds before retrying...", backoff)
+                        await asyncio.sleep(backoff)
+                        continue
+                    else:
+                        logger.exception("Error al enviar artículo %s después de %d intentos: %s", article.title, max_retries, str(e))
+                        results.append({"title": article.title, "status": "error", "detail": str(e)})
+                        resp = None
+                        break
+
+            if resp is None:
+                continue
+
+            logger.debug("Respuesta Strapi status=%s for title=%s", resp.status_code, article.title)
+            body_snippet = resp.text
+            if len(body_snippet) > 1000:
+                body_snippet = body_snippet[:1000] + "..."
+            logger.debug("Response body (snip): %s", body_snippet)
+
             if resp.status_code in (200, 201):
                 results.append({"title": article.title, "status": "ok"})
-            else:
-                results.append({"title": article.title, "status": "error", "detail": resp.text})
+                continue
+
+            # para 400, parsear y devolver detalle útil
+            if resp.status_code == 400:
+                try:
+                    j = resp.json()
+                except Exception:
+                    j = None
+                results.append({"title": article.title, "status": "error", "detail": j or body_snippet})
+                continue
+
+            # otros códigos
+            results.append({"title": article.title, "status": "error", "detail": resp.text})
 
     return {"synced": results}
 
