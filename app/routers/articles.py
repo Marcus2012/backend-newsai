@@ -38,14 +38,18 @@ async def sync_strapi_articles(
     result = await db.execute(select(GeneratedArticle))
     articles = result.scalars().all()
 
-    # 2. Configuración de Strapi
-    strapi_url = os.getenv("STRAPI_URL", "http://72.62.83.18:1338/api/articles")
-    strapi_token = os.getenv("STRAPI_TOKEN", "fe81e548eae6af5a3a7157d9bb7ef83dc756396951a865c7c3a8e820ca0afd0766d8c0665db87520cbccf8486415ed0feca20a345372825990a8b4265ceaaf1b6a6810fc24972842e850d7eab0f5938e33bd73bef7d2266d68fd9256eefa4203283b00b83a6e5924695f48492fdfd1e17fce6ef1ddb7aa4152a34fd9616c2bd6")
+    # 2. Configuración de Strapi (obligatorio en entorno de producción)
+    # STRAPI_URL debe apuntar al endpoint público de Strapi (ej: https://mi-strapi.example.com/api/articles)
+    # STRAPI_TOKEN debe guardarse en secreto (Secret Manager / env var) y no versionarse.
+    strapi_url = os.getenv("STRAPI_URL")
+    strapi_token = os.getenv("STRAPI_TOKEN")
     # Sanitizar token de posibles saltos de línea o espacios
     if strapi_token:
         strapi_token = strapi_token.strip()
 
-    # No registrar STRAPI_URL ni STRAPI_TOKEN en logs
+    # Forzar que estén presentes en el entorno; evita usar defaults inseguros en producción
+    if not strapi_url or not strapi_token:
+        raise HTTPException(status_code=500, detail="STRAPI_URL o STRAPI_TOKEN no configurados en el entorno")
 
     headers = {
         "Authorization": f"Bearer {strapi_token}",
