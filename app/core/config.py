@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Preferred Gemini model (can be overridden in .env)
     GEMINI_MODEL: str = "gemini-2.5-pro"
     SCRAPEGRAPH_ENDPOINT: str = "http://localhost:8001/api/scrape"
+    # Strapi configuration (production/staging)
+    STRAPI_URL: str = ""
+    STRAPI_TOKEN: str = ""
 
     # FootyStats API
     FOOTYSTATS_API_KEY: str = "f37d0d7b03a98882d9a3672336c2a30d89ade024875637d35b5cd5f224149d0e"
