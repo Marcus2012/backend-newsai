@@ -2,7 +2,6 @@
 import os
 import re
 import httpx
-import logging
 import asyncio
 import time
 from urllib.parse import urlparse
@@ -25,10 +24,7 @@ from app.utils.auth import get_current_user
 
 router = APIRouter()
 
-# Configurar logger para debugging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("app.routers.articles")
-logger.setLevel(logging.DEBUG)
+# logger removido para evitar exposición de credenciales en logs
 # Endpoint para sincronizar artículos a Strapi
 @router.post("/sync-strapi", summary="Sincroniza artículos a Strapi")
 async def sync_strapi_articles(
@@ -49,26 +45,14 @@ async def sync_strapi_articles(
     if strapi_token:
         strapi_token = strapi_token.strip()
 
-    # Logs básicos de configuración (no imprimir token completo en logs)
-    logger.debug("STRAPI_URL=%s", strapi_url)
-    if strapi_token:
-        masked = f"{strapi_token[:6]}...{strapi_token[-6:]}"
-    else:
-        masked = None
-    logger.debug("STRAPI_TOKEN (masked)=%s", masked)
+    # No registrar STRAPI_URL ni STRAPI_TOKEN en logs
 
     headers = {
         "Authorization": f"Bearer {strapi_token}",
         "Content-Type": "application/json",
     }
 
-    # Log headers con token enmascarado
-    if strapi_token:
-        headers_log = dict(headers)
-        headers_log["Authorization"] = f"Bearer {strapi_token[:6]}...{strapi_token[-6:]}"
-    else:
-        headers_log = headers
-    logger.debug("Headers enviando a Strapi: %s", headers_log)
+    # No registrar headers ni token en producción
 
     results = []
     # Configurar timeouts y reintentos
@@ -76,7 +60,7 @@ async def sync_strapi_articles(
     max_retries = 3
 
     async with httpx.AsyncClient(timeout=timeout) as client:
-        logger.debug("Enviando %d artículos a Strapi", len(articles))
+        # Procesar y enviar artículos a Strapi
         async def upload_image_from_url(img_url: str) -> Optional[int]:
             """Download image from a remote URL and upload to Strapi via /api/upload.
 
@@ -111,9 +95,10 @@ async def sync_strapi_articles(
                         data_obj = j.get("data")
                         if isinstance(data_obj, list) and len(data_obj) > 0:
                             return data_obj[0].get("id")
-                logger.debug("Image upload failed status=%s body=%s", resp.status_code, resp.text[:400])
+                # Image upload failed: continuar sin media
             except Exception as e:
-                logger.exception("Error uploading image from URL %s: %s", img_url, str(e))
+                # Ignorar errores de subida de imagen
+                pass
             return None
         for idx, article in enumerate(articles, start=1):
             # generar slug seguro a partir del title
@@ -147,24 +132,25 @@ async def sync_strapi_articles(
 
             payload = {"data": data}
 
-            logger.debug("[%d/%d] Enviando artículo title=%s", idx, len(articles), article.title)
-            logger.debug("Payload: %s", payload)
+            # Preparado para enviar artículo
 
             # Si existe image_url, intentar subirla a Strapi y enlazarla como media
             try:
                 image_url = getattr(article, "image_url", None)
                 if image_url:
-                    logger.debug("Intentando subir imagen desde URL para title=%s url=%s", article.title, image_url)
+                    # Intento de subir imagen desde URL
                     media_id = await upload_image_from_url(image_url)
                     if media_id:
                         # Asignar el id del media al campo 'image' (campo Media en Strapi)
                         data["image"] = media_id
                         payload = {"data": data}
-                        logger.debug("Imagen subida, media_id=%s para title=%s", media_id, article.title)
+                        # Imagen subida con éxito
                     else:
-                        logger.debug("No se pudo subir la imagen para title=%s; se continuará sin imagen", article.title)
+                        # No se pudo subir la imagen; continuar sin imagen
+                        pass
             except Exception:
-                logger.exception("Error manejando image_url para artículo %s", article.title)
+                # Ignorar errores al manejar image_url
+                pass
 
             # Intentar reintentos en caso de timeout/connection errors
             resp = None
@@ -173,14 +159,11 @@ async def sync_strapi_articles(
                     resp = await client.post(strapi_url, json=payload, headers=headers)
                     break
                 except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.RequestError) as e:
-                    logger.warning("Attempt %d/%d failed for %s: %s", attempt, max_retries, article.title, str(e))
                     if attempt < max_retries:
                         backoff = 2 ** (attempt - 1)
-                        logger.debug("Backoff %s seconds before retrying...", backoff)
                         await asyncio.sleep(backoff)
                         continue
                     else:
-                        logger.exception("Error al enviar artículo %s después de %d intentos: %s", article.title, max_retries, str(e))
                         results.append({"title": article.title, "status": "error", "detail": str(e)})
                         resp = None
                         break
@@ -188,11 +171,10 @@ async def sync_strapi_articles(
             if resp is None:
                 continue
 
-            logger.debug("Respuesta Strapi status=%s for title=%s", resp.status_code, article.title)
             body_snippet = resp.text
             if len(body_snippet) > 1000:
                 body_snippet = body_snippet[:1000] + "..."
-            logger.debug("Response body (snip): %s", body_snippet)
+            # Response body (recortado si es largo)
 
             if resp.status_code in (200, 201):
                 results.append({"title": article.title, "status": "ok"})
