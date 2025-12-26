@@ -19,6 +19,7 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.core.models import GeneratedArticle, RawArticle, StatusEnum
+from app.core.config import settings
 from app.services.wordpress import publish_to_wordpress
 from app.utils.auth import get_current_user
 
@@ -41,10 +42,11 @@ async def sync_strapi_articles(
     # 2. Configuración de Strapi (obligatorio en entorno de producción)
     # STRAPI_URL debe apuntar al endpoint público de Strapi (ej: https://mi-strapi.example.com/api/articles)
     # STRAPI_TOKEN debe guardarse en secreto (Secret Manager / env var) y no versionarse.
-    strapi_url = os.getenv("STRAPI_URL")
-    strapi_token = os.getenv("STRAPI_TOKEN")
+    # Leer configuración desde el singleton `settings` (carga .env automáticamente)
+    strapi_url = getattr(settings, "STRAPI_URL", None)
+    strapi_token = getattr(settings, "STRAPI_TOKEN", None)
     # Sanitizar token de posibles saltos de línea o espacios
-    if strapi_token:
+    if isinstance(strapi_token, str):
         strapi_token = strapi_token.strip()
 
     # Forzar que estén presentes en el entorno; evita usar defaults inseguros en producción
