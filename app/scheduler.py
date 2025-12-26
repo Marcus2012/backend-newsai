@@ -133,6 +133,7 @@ async def scraping_job():
                                     raw_article_id=raw_article.id,
                                     title=ai_article.get("title") or raw_article.scraped_title or "Sin título",
                                     description=ai_article.get("description") or generation_context,
+                                    scraped_body=detail_data.get("body") or raw_article.scraped_body,
                                     seo_meta=ai_article.get("seo"),
                                     image_url=img_url,
                                     status=StatusEnum.draft
@@ -149,6 +150,7 @@ async def scraping_job():
                                     raw_article_id=raw_article.id,
                                     title=raw_article.scraped_title or article.get("title") or "Sin título",
                                     description=fallback_description,
+                                    scraped_body=detail_data.get("body") or raw_article.scraped_body,
                                     seo_meta=None,
                                     image_url=img_url,
                                     status=StatusEnum.draft

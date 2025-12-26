@@ -44,12 +44,67 @@ async def scrape_url(
                 # Wait a bit for dynamic content
                 await page.wait_for_timeout(2000)
                 
-                # Clean HTML to reduce tokens (remove scripts, styles, svgs)
-                html_content = await page.evaluate("""() => {
-                    const elements = document.querySelectorAll('script, style, noscript, iframe, svg, link[rel="stylesheet"]');
-                    elements.forEach(el => el.remove());
-                    return document.body.innerHTML;
-                }""")
+                # First, try to extract structured article data from the DOM (more reliable)
+                try:
+                    structured = await page.evaluate("""() => {
+                        const qs = (s) => document.querySelector(s);
+                        const qsa = (s) => Array.from(document.querySelectorAll(s));
+
+                        const getMeta = (name) => {
+                            const m = document.querySelector(`meta[name="${name}"]`) || document.querySelector(`meta[property="${name}"]`);
+                            return m ? m.getAttribute('content') : null;
+                        };
+
+                        const title = (qs('h1') && qs('h1').innerText.trim()) || (qs('.article-title') && qs('.article-title').innerText.trim()) || getMeta('og:title') || getMeta('twitter:title');
+                        // published time: prefer <time> elements or meta tags
+                        const timeEl = qs('time');
+                        const published = timeEl ? (timeEl.getAttribute('datetime') || timeEl.innerText.trim()) : (getMeta('article:published_time') || getMeta('og:published_time') || getMeta('pubdate'));
+
+                        // attempt to find the article container (include RPP selector .article__main and Depor .story-contents.w-full)
+                        const articleEl = qs('article') || qs('.story-contents.w-full') || qs('.story-contents') || qs('.article__main') || qs('.article-body') || qs('.post-content') || qs('.content') || qs('#content');
+
+                        const paragraphs = [];
+                        if (articleEl) {
+                            // collect text from paragraphs and important blocks (p, h2, blockquote, li)
+                            const nodes = articleEl.querySelectorAll('p, h2, h3, blockquote, li');
+                            nodes.forEach(n => {
+                                const t = n.innerText.trim();
+                                if (t) paragraphs.push(t);
+                            });
+                        } else {
+                            // fallback: take paragraphs from body
+                            qsa('p').forEach(p => { const t = p.innerText.trim(); if (t) paragraphs.push(t); });
+                        }
+
+                        // images: prefer images inside article, then og:image
+                        const images = [];
+                        const imgEls = articleEl ? Array.from(articleEl.querySelectorAll('img')) : qsa('img');
+                        imgEls.forEach(img => {
+                            const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-lazy-src');
+                            if (src) images.push(src);
+                        });
+                        if (images.length === 0) {
+                            const og = getMeta('og:image') || getMeta('twitter:image');
+                            if (og) images.push(og);
+                        }
+
+                        return {
+                            title: title || null,
+                            published: published || null,
+                            paragraphs: paragraphs,
+                            images: images,
+                            raw_html: document.body.innerHTML
+                        };
+                    """)
+                    # set html_content from structured raw_html
+                    html_content = structured.get('raw_html', '')
+                except Exception:
+                    # If structured extraction fails, fall back to cleaning HTML
+                    html_content = await page.evaluate("""() => {
+                        const elements = document.querySelectorAll('script, style, noscript, iframe, svg, link[rel="stylesheet"]');
+                        elements.forEach(el => el.remove());
+                        return document.body.innerHTML;
+                    }""")
             except Exception as e:
                 print(f"❌ Playwright Error: {e}")
                 return _get_mock_data(url)
@@ -61,6 +116,21 @@ async def scrape_url(
 
     if not html_content:
         return _get_mock_data(url)
+
+    # If we extracted structured DOM data already, prefer that result for article pages
+    if scraping_type == "article":
+        if 'structured' in locals() and structured and isinstance(structured.get('paragraphs', None), list) and len(structured.get('paragraphs'))>0:
+            body_text = "\n\n".join(structured.get('paragraphs', []))
+            images = structured.get('images', []) or []
+            return {
+                "title": structured.get('title') or "",
+                "body": body_text,
+                "image_url": images[0] if images else "",
+                "images": images,
+                "published": structured.get('published'),
+                "raw_html": html_content,
+                "success": True
+            }
 
     # 2. Process with Gemini
     try:

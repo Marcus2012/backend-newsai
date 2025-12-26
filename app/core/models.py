@@ -2,6 +2,7 @@
 SQLAlchemy ORM Models
 """
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum, JSON, func
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -57,6 +58,7 @@ class GeneratedArticle(Base):
     raw_article_id = Column(String(36), ForeignKey("raw_articles.id"), nullable=False)
     title = Column(Text, nullable=False)
     description = Column(Text, nullable=False)
+    scraped_body = Column(MEDIUMTEXT, nullable=True)
     seo_meta = Column(JSON, nullable=True)
     image_url = Column(Text, nullable=True)
     status = Column(Enum(StatusEnum), default=StatusEnum.draft, index=True)
