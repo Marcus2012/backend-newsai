@@ -7,6 +7,11 @@ import os
 
 
 class Settings(BaseSettings):
+    # API-SPORTS (Liga Perú)
+    API_SPORTS_KEY: str = ""
+    API_SPORTS_BASE: str = "https://v3.football.api-sports.io"
+    PERU_LEAGUE_ID: int = 281
+    PERU_SEASON: int = 2025
     """Application settings loaded from environment variables"""
     
     # Application

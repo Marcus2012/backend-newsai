@@ -1,32 +1,72 @@
-import os
-
 """
 Football Router - FootyStats proxy endpoints
 """
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Any, Dict, Optional
-
+import httpx
 from app.services import footystats, football_ai
 import httpx
 from app.utils.auth import get_current_user
 from app.core.config import settings
+import os
 
 router = APIRouter()
 
-# Endpoint tabla de posiciones Liga Perú usando API key de settings
-@router.get("/league-table", summary="Tabla de posiciones Liga Perú")
-async def peru_league_table(current_user: str = Depends(get_current_user)):
-    api_key = getattr(settings, "FOOTBALL_DATA_API_KEY", None)
-    if not api_key:
-        # Si no está en settings, usar la key hardcodeada como fallback
-        api_key = "f37d0d7b03a98882d9a3672336c2a30d89ade024875637d35b5cd5f224149d0e"
-    url = f"https://api.football-data-api.com/league-tables?key={api_key}&season_id=14912"
+# --- API-SPORTS Token y constantes desde settings/env ---
+API_SPORTS_KEY = getattr(settings, "API_SPORTS_KEY", "")
+API_SPORTS_BASE = getattr(settings, "API_SPORTS_BASE", "https://v3.football.api-sports.io")
+PERU_LEAGUE_ID = int(getattr(settings, "PERU_LEAGUE_ID", 281))
+SEASON = int(getattr(settings, "PERU_SEASON", 2025))
+
+# --- Helper para requests API-SPORTS ---
+async def api_sports_get(endpoint: str, params: dict = None):
+    headers = {"x-apisports-key": API_SPORTS_KEY}
+    url = f"{API_SPORTS_BASE}{endpoint}"
     async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-        if response.status_code != 200:
-            raise HTTPException(status_code=502, detail="Error consultando API externa")
-        return response.json()
+        resp = await client.get(url, headers=headers, params=params)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"API-SPORTS error: {resp.text}")
+        return resp.json()
+
+
+# --- Endpoint: Tabla de posiciones Liga Perú (Apertura/Clausura) ---
+@router.get("/peru/table", summary="Tabla de posiciones Liga Perú (API-SPORTS)")
+async def peru_table(phase: str = Query("Apertura", enum=["Apertura", "Clausura"], description="Fase: Apertura o Clausura")):
+    round_param = f"{phase} - 1"
+    # Buscar el round actual para la fase
+    rounds_data = await api_sports_get("/fixtures/rounds", {"league": PERU_LEAGUE_ID, "season": SEASON})
+    rounds = rounds_data.get("response", [])
+    # Buscar el último round jugado de la fase
+    last_round = next((r for r in reversed(rounds) if phase in r), round_param)
+    standings_data = await api_sports_get("/standings", {"league": PERU_LEAGUE_ID, "season": SEASON})
+    standings = standings_data.get("response", [{}])[0].get("league", {}).get("standings", [[]])[0]
+    return {"phase": phase, "round": last_round, "standings": standings}
+
+# --- Endpoint: Predicción IA Gemini para un partido ---
+@router.get("/matches/{match_id}/predict", summary="Predicción IA Gemini para un partido")
+async def predict_match_ai(match_id: int):
+    # Obtener datos del partido desde API-SPORTS
+    fixture_data = await api_sports_get("/fixtures", {"id": match_id})
+    fixture = fixture_data.get("response", [{}])[0]
+    if not fixture:
+        raise HTTPException(status_code=404, detail="Partido no encontrado")
+    # Llamar a la IA para predecir
+    from app.services.football_ai import predict_match
+    prediction = await predict_match(fixture)
+    return {"match_id": match_id, "fixture": fixture, "prediction": prediction}
+
+
+# --- Endpoint: Resumen últimos partidos y estadísticas globales Liga Perú ---
+@router.get("/peru/summary", summary="Resumen y estadísticas Liga Perú (API-SPORTS)")
+async def peru_summary():
+    # Últimos partidos
+    fixtures_data = await api_sports_get("/fixtures", {"league": PERU_LEAGUE_ID, "season": SEASON, "last": 5})
+    last_fixtures = fixtures_data.get("response", [])
+    # Estadísticas generales
+    stats_data = await api_sports_get("/leagues", {"id": PERU_LEAGUE_ID})
+    league_info = stats_data.get("response", [{}])[0]
+    return {"last_fixtures": last_fixtures, "league_info": league_info}
 
 
 @router.get("/presets", summary="List preset leagues")
