@@ -2,7 +2,7 @@
 News AI Generator - Main Application Entry Point
 """
 import importlib
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
@@ -84,6 +84,17 @@ async def root():
         "docs": "/docs",
         "health": "/health"
     }
+
+
+# --- Legacy frontend routes (compatibility) ---------------------------------
+@app.get("/peru/summary", summary="Legacy: Resumen Liga Perú")
+async def peru_summary_legacy():
+    return await football.peru_summary()
+
+
+@app.get("/peru/table", summary="Legacy: Tabla Liga Perú")
+async def peru_table_legacy(phase: str = Query("Apertura", description="Fase: Apertura o Clausura")):
+    return await football.peru_table(phase=phase)
 
 
 if __name__ == "__main__":
