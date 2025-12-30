@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     
     # Scraping
     SCRAPE_URLS: str = "https://rpp.pe/deportes,https://depor.com/,https://www.espn.com.pe/"
+
+    # EasyPromos (autologin + promo link)
+    EASYPROMOS_API_AUTLOGIN: str = "https://api.easypromosapp.com/v2/users/autologin/{campaign_id}"
+    EASYPROMOS_PROMO_BASE: str = "https://a.cstmapp.com/p/{campaign_id}"
+    # Optional defaults
+    EASYPROMOS_API_TOKEN: str = ""
+    EASYPROMOS_CAMPAIGN_ID: str = ""
     
     # CORS
     CORS_ORIGINS: str = "*"
