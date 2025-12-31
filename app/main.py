@@ -1,8 +1,4 @@
 from app.core.config import settings
-
-# Log de depuración para EasyPromos
-print("[DEBUG] EASYPROMOS_API_AUTLOGIN:", settings.EASYPROMOS_API_AUTLOGIN)
-print("[DEBUG] EASYPROMOS_PROMO_BASE:", settings.EASYPROMOS_PROMO_BASE)
 """
 News AI Generator - Main Application Entry Point
 """
@@ -22,7 +18,7 @@ except Exception:
 from app.core.database import init_db
 from app.core.config import settings
 from app.routers import auth, articles, templates, health
-from app.routers import football, easypromo
+from app.routers import football
 from app.scheduler import start_scheduler
 
 
@@ -79,7 +75,7 @@ app.include_router(articles.router, prefix="/admin/articles", tags=["Articles"])
 app.include_router(templates.router, prefix="/admin/templates", tags=["Templates"])
 app.include_router(health.router, tags=["Health"])
 app.include_router(football.router, prefix="/football", tags=["Football"])
-app.include_router(easypromo.router, prefix="/api/easypromo", tags=["EasyPromo"])
+
 
 
 @app.get("/")
