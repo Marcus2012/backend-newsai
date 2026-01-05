@@ -19,6 +19,9 @@ from app.core.database import init_db
 from app.core.config import settings
 from app.routers import auth, articles, templates, health
 from app.routers import football
+from app.routers import api as api_router
+from typing import Dict, Any
+from app.routers import api as api_module
 from app.scheduler import start_scheduler
 
 
@@ -75,6 +78,13 @@ app.include_router(articles.router, prefix="/admin/articles", tags=["Articles"])
 app.include_router(templates.router, prefix="/admin/templates", tags=["Templates"])
 app.include_router(health.router, tags=["Health"])
 app.include_router(football.router, prefix="/football", tags=["Football"])
+app.include_router(api_router.router, prefix="/api", tags=["API"])
+
+
+# Compatibilidad: ruta raíz `/predict` usada por algunos frontends
+@app.post("/predict")
+async def predict_root(fixture: Dict[str, Any]):
+    return await api_module.predict_from_frontend(fixture)
 
 
 

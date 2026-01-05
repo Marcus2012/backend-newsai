@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     DATABASE_URL_LOCAL: str = ""
     
     # External Services
-    GEMINI_API_KEY: str = ""
+    GEMINI_API_KEY: str = "AIzaSyDSxL4361Hes4FX_TtBO6StJSwsg5JnL3Y"
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     # Preferred Gemini model (can be overridden in .env)
