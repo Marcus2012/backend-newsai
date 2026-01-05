@@ -38,16 +38,41 @@ def _build_prompt(match: Dict[str, Any]) -> str:
 def _predict_sync(prompt: str) -> Dict[str, Any]:
     if not settings.GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY no esta configurado")
-    model = genai.GenerativeModel("gemini-pro")
-    response = model.generate_content(prompt)
-    text = response.text.strip()
+    # Prefer model name from settings (e.g. "models/gemini-2.5-pro").
+    model_name = getattr(settings, "GEMINI_MODEL", None) or "models/gemini-2.5-pro"
+    model = genai.GenerativeModel(model_name)
+    try:
+        response = model.generate_content(prompt)
+    except Exception as exc:
+        # Re-raise with model info to help debugging issues like 404 unsupported model
+        raise RuntimeError(f"error generating content with model={model_name}: {exc}") from exc
+    text = getattr(response, "text", "") or ""
+    text = text.strip()
+    if not text:
+        raise RuntimeError(f"Empty response text from model={model_name}; full response repr: {repr(response)}")
     if text.startswith("```json"):
         text = text[7:]
     if text.startswith("```"):
         text = text[3:]
     if text.endswith("```"):
         text = text[:-3]
-    result = json.loads(text)
+    # If the model didn't return pure JSON, try to extract a JSON object from the text.
+    try:
+        result = json.loads(text)
+    except Exception:
+        import re
+
+        m = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        if m:
+            candidate = m.group(0)
+            try:
+                result = json.loads(candidate)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"failed to parse JSON from model={model_name}. extracted_candidate={candidate!r} full_text={text!r}"
+                ) from exc
+        else:
+            raise RuntimeError(f"failed to parse JSON from model={model_name}. text={text!r}")
     for key in ("winner", "scoreline", "confidence"):
         if key not in result:
             raise ValueError("Respuesta incompleta del modelo")

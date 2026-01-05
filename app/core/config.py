@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     # Scraping
     SCRAPE_URLS: str = "https://rpp.pe/deportes,https://depor.com/,https://www.espn.com.pe/"
 
+    # Easypromos integration (opcional)
+    EASYPROMOS_API_TOKEN: str = ""
+    EASYPROMOS_CAMPAIGN_ID: str = ""
+    EASYPROMOS_API_AUTLOGIN: str = ""
+    EASYPROMOS_PROMO_BASE: str = ""
+
 
     
     # CORS
