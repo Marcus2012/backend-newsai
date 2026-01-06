@@ -30,9 +30,8 @@ async def scrape_url(
     """
     print(f"--- Scraping {url} ({scraping_type}) ---")
     
-    # 1. Fetch HTML content using Playwright (or httpx fallback)
+    # 1. Try a fast HTTP fetch first (avoids launching Chromium when not needed)
     html_content = ""
-    # Fast-path: try a simple HTTP fetch first (cheaper and avoids launching Chromium)
     used_httpx = False
     try:
         headers = {
@@ -45,135 +44,107 @@ async def scrape_url(
                 used_httpx = True
                 print(f"Fetched HTML via httpx for {url} (len={len(html_content)})")
     except Exception:
-        # ignore and fall back to Playwright
         used_httpx = False
+
+    # If httpx didn't produce useful HTML, fall back to Playwright (for JS-heavy pages)
     try:
-        async with async_playwright() as p:
-            # Use configured Playwright launch args (helps on Cloud Run)
-            launch_args = getattr(settings, "playwright_launch_args_list", [])
-            browser = await p.chromium.launch(headless=True, args=launch_args)
-            # Create a new context with a user agent to avoid blocking
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-            )
-            page = await context.new_page()
-            try:
-                timeout_ms = getattr(settings, "SCRAPE_TIMEOUT_MS", 120000)
-                await page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-                # Wait a bit for dynamic content
-                await page.wait_for_timeout(2000)
-                
-                # First, try to extract structured article data from the DOM (more reliable)
+        if not used_httpx:
+            async with async_playwright() as p:
+                launch_args = getattr(settings, "playwright_launch_args_list", [])
+                browser = await p.chromium.launch(headless=True, args=launch_args)
+                context = await browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                )
+                page = await context.new_page()
                 try:
-                    structured = await page.evaluate("""() => {
-                        const qs = (s) => document.querySelector(s);
-                        const qsa = (s) => Array.from(document.querySelectorAll(s));
+                    timeout_ms = getattr(settings, "SCRAPE_TIMEOUT_MS", 120000)
+                    await page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+                    await page.wait_for_timeout(2000)
+                    try:
+                        structured = await page.evaluate("""() => {
+                            const qs = (s) => document.querySelector(s);
+                            const qsa = (s) => Array.from(document.querySelectorAll(s));
 
-                        const getMeta = (name) => {
-                            const m = document.querySelector(`meta[name="${name}"]`) || document.querySelector(`meta[property="${name}"]`);
-                            return m ? m.getAttribute('content') : null;
-                        };
+                            const getMeta = (name) => {
+                                const m = document.querySelector(`meta[name="${name}"]`) || document.querySelector(`meta[property="${name}"]`);
+                                return m ? m.getAttribute('content') : null;
+                            };
 
-                        const title = (qs('h1') && qs('h1').innerText.trim()) || (qs('.article-title') && qs('.article-title').innerText.trim()) || getMeta('og:title') || getMeta('twitter:title');
-                        // published time: prefer <time> elements or meta tags
-                        const timeEl = qs('time');
-                        const published = timeEl ? (timeEl.getAttribute('datetime') || timeEl.innerText.trim()) : (getMeta('article:published_time') || getMeta('og:published_time') || getMeta('pubdate'));
+                            const title = (qs('h1') && qs('h1').innerText.trim()) || (qs('.article-title') && qs('.article-title').innerText.trim()) || getMeta('og:title') || getMeta('twitter:title');
+                            const timeEl = qs('time');
+                            const published = timeEl ? (timeEl.getAttribute('datetime') || timeEl.innerText.trim()) : (getMeta('article:published_time') || getMeta('og:published_time') || getMeta('pubdate'));
 
-                        // attempt to find the article container (include RPP selector .article__main and Depor .story-contents.w-full)
-                        const articleEl = qs('article') || qs('.story-contents.w-full') || qs('.story-contents') || qs('.article__main') || qs('.article-body') || qs('.post-content') || qs('.content') || qs('#content');
+                            const articleEl = qs('article') || qs('.story-contents.w-full') || qs('.story-contents') || qs('.article__main') || qs('.article-body') || qs('.post-content') || qs('.content') || qs('#content');
 
-                        const paragraphs = [];
-                        if (articleEl) {
-                            // collect text from paragraphs and important blocks (p, h2, blockquote, li)
-                            const nodes = articleEl.querySelectorAll('p, h2, h3, blockquote, li');
-                            nodes.forEach(n => {
-                                try:
-                                    # Only launch Playwright if httpx didn't return usable HTML or we need JS rendering
-                                    if not used_httpx:
-                                        async with async_playwright() as p:
-                                            # Use configured Playwright launch args (helps on Cloud Run)
-                                            launch_args = getattr(settings, "playwright_launch_args_list", [])
-                                            browser = await p.chromium.launch(headless=True, args=launch_args)
-                                            # Create a new context with a user agent to avoid blocking
-                                            context = await browser.new_context(
-                                                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-                                            )
-                                            page = await context.new_page()
-                                            try:
-                                                timeout_ms = getattr(settings, "SCRAPE_TIMEOUT_MS", 120000)
-                                                await page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-                                                # Wait a bit for dynamic content
-                                                await page.wait_for_timeout(2000)
-                    
-                                                # First, try to extract structured article data from the DOM (more reliable)
-                                                try:
-                                                    structured = await page.evaluate("""() => {
-                                                        const qs = (s) => document.querySelector(s);
-                                                        const qsa = (s) => Array.from(document.querySelectorAll(s));
+                            const paragraphs = [];
+                            if (articleEl) {
+                                const nodes = articleEl.querySelectorAll('p, h2, h3, blockquote, li');
+                                nodes.forEach(n => { const t = n.innerText.trim(); if (t) paragraphs.push(t); });
+                            } else {
+                                qsa('p').forEach(p => { const t = p.innerText.trim(); if (t) paragraphs.push(t); });
+                            }
 
-                                                        const getMeta = (name) => {
-                                                            const m = document.querySelector(`meta[name="${name}"]`) || document.querySelector(`meta[property="${name}"]`);
-                                                            return m ? m.getAttribute('content') : null;
-                                                        };
+                            const images = [];
+                            const imgEls = articleEl ? Array.from(articleEl.querySelectorAll('img')) : qsa('img');
+                            imgEls.forEach(img => { const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-lazy-src'); if (src) images.push(src); });
+                            if (images.length === 0) {
+                                const og = getMeta('og:image') || getMeta('twitter:image'); if (og) images.push(og);
+                            }
 
-                                                        const title = (qs('h1') && qs('h1').innerText.trim()) || (qs('.article-title') && qs('.article-title').innerText.trim()) || getMeta('og:title') || getMeta('twitter:title');
-                                                        // published time: prefer <time> elements or meta tags
-                                                        const timeEl = qs('time');
-                                                        const published = timeEl ? (timeEl.getAttribute('datetime') || timeEl.innerText.trim()) : (getMeta('article:published_time') || getMeta('og:published_time') || getMeta('pubdate'));
+                            return { title: title || null, published: published || null, paragraphs: paragraphs, images: images, raw_html: document.body.innerHTML };
+                        """)
+                        html_content = structured.get('raw_html', '')
+                    except Exception:
+                        html_content = await page.evaluate("""() => {
+                            const elements = document.querySelectorAll('script, style, noscript, iframe, svg, link[rel="stylesheet"]');
+                            elements.forEach(el => el.remove());
+                            return document.body.innerHTML;
+                        }""")
+                except Exception as e:
+                    print(f"❌ Playwright Error: {e}")
+                    return _get_mock_data(url)
+                finally:
+                    await browser.close()
+        else:
+            # httpx provided HTML, continue
+            pass
+    except Exception as e:
+        print(f"❌ Browser Error: {e}")
+        return _get_mock_data(url)
 
-                                                        // attempt to find the article container (include RPP selector .article__main and Depor .story-contents.w-full)
-                                                        const articleEl = qs('article') || qs('.story-contents.w-full') || qs('.story-contents') || qs('.article__main') || qs('.article-body') || qs('.post-content') || qs('.content') || qs('#content');
+    if not html_content:
+        return _get_mock_data(url)
 
-                                                        const paragraphs = [];
-                                                        if (articleEl) {
-                                                            // collect text from paragraphs and important blocks (p, h2, blockquote, li)
-                                                            const nodes = articleEl.querySelectorAll('p, h2, h3, blockquote, li');
-                                                            nodes.forEach(n => {
-                                                                const t = n.innerText.trim();
-                                                                if (t) paragraphs.push(t);
-                                                            });
-                                                        } else {
-                                                            // fallback: take paragraphs from body
-                                                            qsa('p').forEach(p => { const t = p.innerText.trim(); if (t) paragraphs.push(t); });
-                                                        }
+    # If we extracted structured DOM data already, prefer that result for article pages
+    if scraping_type == "article":
+        if 'structured' in locals() and structured and isinstance(structured.get('paragraphs', None), list) and len(structured.get('paragraphs'))>0:
+            body_text = "\n\n".join(structured.get('paragraphs', []))
+            images = structured.get('images', []) or []
+            return {
+                "title": structured.get('title') or "",
+                "body": body_text,
+                "image_url": images[0] if images else "",
+                "images": images,
+                "published": structured.get('published'),
+                "raw_html": html_content,
+                "success": True
+            }
 
-                                                        // images: prefer images inside article, then og:image
-                                                        const images = [];
-                                                        const imgEls = articleEl ? Array.from(articleEl.querySelectorAll('img')) : qsa('img');
-                                                        imgEls.forEach(img => {
-                                                            const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-lazy-src');
-                                                            if (src) images.push(src);
-                                                        });
-                                                        if (images.length === 0) {
-                                                            const og = getMeta('og:image') || getMeta('twitter:image');
-                                                            if (og) images.push(og);
-                                                        }
-
-                                                        return {
-                                                            title: title || null,
-                                                            published: published || null,
-                                                            paragraphs: paragraphs,
-                                                            images: images,
-                                                            raw_html: document.body.innerHTML
-                                                        };
-                                                    """)
-                                                    # set html_content from structured raw_html
-                                                    html_content = structured.get('raw_html', '')
-                                                except Exception:
-                                                    # If structured extraction fails, fall back to cleaning HTML
-                                                    html_content = await page.evaluate("""() => {
-                                                        const elements = document.querySelectorAll('script, style, noscript, iframe, svg, link[rel="stylesheet"]');
-                                                        elements.forEach(el => el.remove());
-                                                        return document.body.innerHTML;
-                                                    }""")
-                                            except Exception as e:
-                                                print(f"❌ Playwright Error: {e}")
-                                                return _get_mock_data(url)
-                                            finally:
-                                                await browser.close()
-                                    else:
-                                        # We have HTML from httpx; allow processing below
-                                        pass
+    # 2. Process with Gemini
+    try:
+        # Choose a model using the centralized selector (may return namespaced 'models/..')
+        model_name = _choose_model()
+        print(f"Using Gemini model: {model_name}")
+        model = genai.GenerativeModel(model_name)
+        
+        if scraping_type == "list":
+            prompt = """
+            You are an expert web scraper. Extract a list of the top 10 news articles from the provided HTML.
+            Return a JSON object with a key 'articles' containing a list of objects.
+            
+            For each article extract:
+            - title: The headline.
+            - url: The absolute link to the article. (If relative, prepend the base domain).
             - summary: A brief summary.
             - image_url: The URL of the image.
             
