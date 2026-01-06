@@ -23,8 +23,8 @@ PyJWT>=2.0.0
 aiohttp>=3.9.0
 
 # AI Services
-# Use the official package name (with hyphen) so the module `google.generativeai` imports correctly
-google-generative-ai>=0.3.0
+# The package providing `google.generativeai` (use the original package name)
+google-generativeai>=0.3.0
 scrapegraphai>=0.1.0
 playwright>=1.40.0
 groq>=0.4.0

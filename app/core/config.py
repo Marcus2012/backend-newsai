@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     
     # CORS
     CORS_ORIGINS: str = "*"
+    # Scraping / Playwright
+    # Timeout for page navigation in milliseconds (used by Playwright page.goto)
+    SCRAPE_TIMEOUT_MS: int = 180000
+    # Comma-separated Chromium launch args for Playwright (useful for Cloud Run)
+    PLAYWRIGHT_LAUNCH_ARGS: str = "--no-sandbox,--disable-dev-shm-usage,--disable-setuid-sandbox"
     
     @property
     def scrape_urls_list(self) -> List[str]:
@@ -75,6 +80,14 @@ class Settings(BaseSettings):
         if self.CORS_ORIGINS == "*":
             return ["*"]
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def playwright_launch_args_list(self) -> List[str]:
+        """Parse PLAYWRIGHT_LAUNCH_ARGS into a list suitable for Playwright's `args` param"""
+        raw = (self.PLAYWRIGHT_LAUNCH_ARGS or "").strip()
+        if not raw:
+            return []
+        return [a.strip() for a in raw.split(',') if a.strip()]
 
     @property
     def footystats_presets(self) -> dict:

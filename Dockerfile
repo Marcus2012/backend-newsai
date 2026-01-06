@@ -27,18 +27,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxshmfence1 \
     libdrm2 \
     libatspi2.0-0 \
-    libwayland-client0 \
-    libwayland-egl1-mesa \
     libpango-1.0-0 \
     libharfbuzz0b \
     fonts-noto-color-emoji \
+    # build deps for Python packages
+    build-essential \
+    libssl-dev \
+    libffi-dev \
+    python3-dev \
+    default-libmysqlclient-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies (including playwright)
-RUN pip install --no-cache-dir -r requirements.txt
+# Upgrade pip/wheel/setuptools then install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Install Playwright browsers and additional OS deps
 # Ensure Playwright downloads browsers into an explicit path inside the image
