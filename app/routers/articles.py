@@ -119,18 +119,59 @@ async def sync_strapi_articles(
             slug_val = slugify(article.title) or (getattr(article, "id", None) or datetime.utcnow().strftime("%Y%m%d%H%M%S"))
 
             # Construir payload con campos permitidos por Strapi
-            # Enviar solamente: title, slug, content, excerpt (evitar campos rechazados como documentId/createdAt/seo_meta/image_url)
+            # Usar `scraped_body` como `content` (más data que description)
+            content_value = getattr(article, "scraped_body", None) or getattr(article, "description", "") or ""
             data = {
                 "title": article.title or "",
                 "slug": slug_val,
-                "content": article.description or "",
+                "content": content_value,
             }
 
-            # excerpt: usar meta_description si existe
+            # Mapear `seo_meta` a la estructura esperada por Strapi (ver panel SEO)
             try:
                 seo = getattr(article, "seo_meta", None)
                 if seo and isinstance(seo, dict):
-                    excerpt = seo.get("meta_description") or seo.get("meta_description") or seo.get("metaTitle") or None
+                    # Preferir varias variantes de nombre de clave
+                    meta_title = seo.get("meta_title") or seo.get("metaTitle") or seo.get("metaTitle") or None
+                    meta_description = seo.get("meta_description") or seo.get("metaDescription") or seo.get("metaDescription") or None
+                    focus_keyword = seo.get("focusKeyword") or (seo.get("keywords")[0] if isinstance(seo.get("keywords"), list) and len(seo.get("keywords"))>0 else None)
+                    canonical_url = seo.get("canonicalURL") or seo.get("canonical_url") or seo.get("canonical") or None
+                    og_title = seo.get("ogTitle") or seo.get("og_title") or None
+                    og_description = seo.get("ogDescription") or seo.get("og_description") or None
+                    twitter_card = seo.get("twitterCard") or seo.get("twitter_card") or None
+
+                    seo_payload = {}
+                    if meta_title:
+                        seo_payload["metaTitle"] = meta_title
+                    if meta_description:
+                        seo_payload["metaDescription"] = meta_description
+                    if focus_keyword:
+                        seo_payload["focusKeyword"] = focus_keyword
+                    if canonical_url:
+                        seo_payload["canonicalURL"] = canonical_url
+                    if og_title:
+                        seo_payload["ogTitle"] = og_title
+                    if og_description:
+                        seo_payload["ogDescription"] = og_description
+                    if twitter_card:
+                        seo_payload["twitterCard"] = twitter_card
+
+                    # Si hay una imagen OG en seo_meta (URL), intentar subirla y asignar media id
+                    og_image_url = seo.get("ogImage") or seo.get("og_image") or seo.get("og_image_url") or seo.get("ogUrl") or None
+                    if og_image_url:
+                        try:
+                            media_id = await upload_image_from_url(og_image_url)
+                            if media_id:
+                                seo_payload["ogImage"] = media_id
+                        except Exception:
+                            pass
+
+                    # Añadir seo_payload al payload principal si tiene datos
+                    if seo_payload:
+                        data["seo"] = seo_payload
+
+                    # excerpt: usar meta_description si existe
+                    excerpt = meta_description or None
                     if excerpt:
                         data["excerpt"] = excerpt
             except Exception:
@@ -213,6 +254,7 @@ class ArticleResponse(BaseModel):
     id: str
     title: str
     description: str
+    scraped_body: Optional[str] = None
     status: str
     image_url: Optional[str]
     seo_meta: Optional[dict]
