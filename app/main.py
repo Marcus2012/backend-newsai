@@ -61,6 +61,8 @@ cors_origins = [
     "http://localhost:3000",
     "http://localhost:4200",
     "https://newsai-predictorfutbol.vercel.app", # Production Vercel
+    "https://www.asieselfutbol.com/",
+    "https://asieselfutbol.com/"
 ]
 
 app.add_middleware(
