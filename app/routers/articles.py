@@ -1,5 +1,6 @@
 
 import os
+import unicodedata
 import re
 import httpx
 import asyncio
@@ -58,6 +59,15 @@ async def sync_strapi_articles(
         "Content-Type": "application/json",
     }
 
+    # Normalizar STRAPI URL: si el valor apunta solo al root del sitio
+    # (ej: https://mi-strapi.example.com/) construir el endpoint de
+    # la colección `/api/articles`. Si `STRAPI_URL` ya apunta a
+    # `/api/...` se usa tal cual.
+    if "/api/" in strapi_url:
+        collection_url = strapi_url.rstrip("/")
+    else:
+        collection_url = strapi_url.rstrip("/") + "/api/articles"
+
     # No registrar headers ni token en producción
 
     results = []
@@ -111,10 +121,19 @@ async def sync_strapi_articles(
             def slugify(text: str) -> Optional[str]:
                 if not text:
                     return None
+                # Lowercase and normalize unicode (remove accents)
                 s = text.lower()
-                s = re.sub(r"[^\w\s-]", "", s)
-                s = re.sub(r"[\s_-]+", "-", s).strip("-")
-                return s[:200]
+                s = unicodedata.normalize("NFKD", s)
+                s = s.encode("ascii", "ignore").decode("ascii")
+
+                # Keep only characters allowed by Strapi slug regex: A-Z a-z 0-9 - _ . ~
+                # Allow spaces temporarily to convert them to hyphens
+                s = re.sub(r"[^A-Za-z0-9\s\-\._~]", "", s)
+                # Convert spaces and consecutive separators to single hyphen
+                s = re.sub(r"[\s_]+", "-", s)
+                s = re.sub(r"-{2,}", "-", s)
+                s = s.strip("-._~")
+                return s[:200] if s else None
 
             slug_val = slugify(article.title) or (getattr(article, "id", None) or datetime.utcnow().strftime("%Y%m%d%H%M%S"))
 
@@ -201,9 +220,16 @@ async def sync_strapi_articles(
 
             # Intentar reintentos en caso de timeout/connection errors
             resp = None
+            # Filtrar claves desconocidas para evitar que Strapi rechace el body
+            # Strapi suele aceptar campos explícitos definidos en el content-type
+            # Ajustar esta lista si el content-type en Strapi tiene otros campos.
+            allowed_fields = {"title", "slug", "content", "excerpt", "image", "category", "author"}
+            # build safe payload
+            safe_data = {k: v for k, v in data.items() if k in allowed_fields}
+            safe_payload = {"data": safe_data}
             for attempt in range(1, max_retries + 1):
                 try:
-                    resp = await client.post(strapi_url, json=payload, headers=headers)
+                    resp = await client.post(collection_url, json=safe_payload, headers=headers)
                     break
                 except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.RequestError) as e:
                     if attempt < max_retries:
@@ -227,12 +253,53 @@ async def sync_strapi_articles(
                 results.append({"title": article.title, "status": "ok"})
                 continue
 
-            # para 400, parsear y devolver detalle útil
+            # para 400, intentar identificar errores de validación (p.ej. slug único)
             if resp.status_code == 400:
                 try:
                     j = resp.json()
                 except Exception:
                     j = None
+
+                # Detectar error de slug único en la respuesta de Strapi
+                def _is_slug_unique_error(obj: dict) -> bool:
+                    try:
+                        err = obj.get("error", {}) or obj
+                        details = err.get("details", {})
+                        errors = details.get("errors") if isinstance(details, dict) else None
+                        if not errors and isinstance(err.get("message"), str):
+                            # some Strapi variants put message directly
+                            return "slug" in (err.get("message", "").lower()) and "unique" in (err.get("message", "").lower())
+                        if isinstance(errors, list):
+                            for e in errors:
+                                path = e.get("path") or []
+                                msg = (e.get("message") or "").lower()
+                                if isinstance(path, list) and "slug" in path and "unique" in msg:
+                                    return True
+                    except Exception:
+                        return False
+                    return False
+
+                if j and _is_slug_unique_error(j):
+                    # Generar slug alternativo y reintentar una vez
+                    try:
+                        import uuid
+                        new_slug = f"{slug_val}-{uuid.uuid4().hex[:8]}"
+                        data["slug"] = new_slug
+                        safe_data = {k: v for k, v in data.items() if k in allowed_fields}
+                        safe_payload = {"data": safe_data}
+                        retry_resp = await client.post(collection_url, json=safe_payload, headers=headers)
+                        if retry_resp.status_code in (200, 201):
+                            results.append({"title": article.title, "status": "ok", "slug": new_slug})
+                            continue
+                        # if retry failed, replace j/body_snippet with retry response
+                        try:
+                            j = retry_resp.json()
+                        except Exception:
+                            j = None
+                            body_snippet = retry_resp.text
+                    except Exception:
+                        pass
+
                 results.append({"title": article.title, "status": "error", "detail": j or body_snippet})
                 continue
 
