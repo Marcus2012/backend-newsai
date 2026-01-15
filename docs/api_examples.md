@@ -398,6 +398,25 @@ curl -X GET "http://localhost:8000/admin/articles/id-inexistente" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
+---
+
+## ⚽ API-SPORTS — Ligas añadidas
+
+Base URL (método GET): https://v3.football.api-sports.io/
+
+A. Obtener información general de la liga
+- Premier League (Inglaterra): https://v3.football.api-sports.io/leagues?id=39
+- Serie A (Italia): https://v3.football.api-sports.io/leagues?id=135
+
+B. Tabla de Posiciones (Standings)
+- Premier League: https://v3.football.api-sports.io/standings?league=39&season=2025
+- Serie A: https://v3.football.api-sports.io/standings?league=135&season=2025
+
+C. Próximos Partidos (Fixtures)
+- Premier League: https://v3.football.api-sports.io/fixtures?league=39&next=10
+- Serie A: https://v3.football.api-sports.io/fixtures?league=135&next=10
+
+
 **Respuesta:**
 ```json
 {

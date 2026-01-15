@@ -18,6 +18,10 @@ API_SPORTS_KEY = getattr(settings, "API_SPORTS_KEY", "")
 API_SPORTS_BASE = getattr(settings, "API_SPORTS_BASE", "https://v3.football.api-sports.io")
 PERU_LEAGUE_ID = int(getattr(settings, "PERU_LEAGUE_ID", 281))
 SEASON = int(getattr(settings, "PERU_SEASON", 2025))
+PREMIER_LEAGUE_ID = int(getattr(settings, "PREMIER_LEAGUE_ID", 39))
+PREMIER_SEASON = int(getattr(settings, "PREMIER_SEASON", 2025))
+SERIEA_LEAGUE_ID = int(getattr(settings, "SERIEA_LEAGUE_ID", 135))
+SERIEA_SEASON = int(getattr(settings, "SERIEA_SEASON", 2025))
 
 # --- Helper para requests API-SPORTS ---
 async def api_sports_get(endpoint: str, params: dict = None):
@@ -67,6 +71,61 @@ async def peru_summary():
     stats_data = await api_sports_get("/leagues", {"id": PERU_LEAGUE_ID})
     league_info = stats_data.get("response", [{}])[0]
     return {"last_fixtures": last_fixtures, "league_info": league_info}
+
+
+# --- Public endpoints for Premier League (England) ---
+@router.get("/public/premier/info", summary="Premier League info (public)")
+async def premier_info():
+    data = await api_sports_get("/leagues", {"id": PREMIER_LEAGUE_ID})
+    return data
+
+
+@router.get("/public/premier/standings", summary="Premier League standings (public)")
+async def premier_standings(season: Optional[int] = None):
+    season = season or PREMIER_SEASON
+    data = await api_sports_get("/standings", {"league": PREMIER_LEAGUE_ID, "season": season})
+    return data
+
+
+@router.get("/public/premier/fixtures", summary="Premier League upcoming fixtures (public)")
+async def premier_fixtures(next: int = Query(10, ge=1, le=100)):
+    data = await api_sports_get("/fixtures", {"league": PREMIER_LEAGUE_ID, "next": next})
+    return data
+
+
+# --- Public endpoints for Serie A (Italy) ---
+@router.get("/public/seriea/info", summary="Serie A info (public)")
+async def seriea_info():
+    data = await api_sports_get("/leagues", {"id": SERIEA_LEAGUE_ID})
+    return data
+
+
+@router.get("/public/seriea/standings", summary="Serie A standings (public)")
+async def seriea_standings(season: Optional[int] = None):
+    season = season or SERIEA_SEASON
+    data = await api_sports_get("/standings", {"league": SERIEA_LEAGUE_ID, "season": season})
+    return data
+
+
+@router.get("/public/seriea/fixtures", summary="Serie A upcoming fixtures (public)")
+async def seriea_fixtures(next: int = Query(10, ge=1, le=100)):
+    data = await api_sports_get("/fixtures", {"league": SERIEA_LEAGUE_ID, "next": next})
+    return data
+
+
+# --- Top scorers (public) ---
+@router.get("/public/premier/top-scorers", summary="Premier League top scorers (public)")
+async def premier_top_scorers(season: Optional[int] = None):
+    season = season or PREMIER_SEASON
+    data = await api_sports_get("/players/topscorers", {"league": PREMIER_LEAGUE_ID, "season": season})
+    return data
+
+
+@router.get("/public/seriea/top-scorers", summary="Serie A top scorers (public)")
+async def seriea_top_scorers(season: Optional[int] = None):
+    season = season or SERIEA_SEASON
+    data = await api_sports_get("/players/topscorers", {"league": SERIEA_LEAGUE_ID, "season": season})
+    return data
 
 
 @router.get("/presets", summary="List preset leagues")

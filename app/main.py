@@ -20,7 +20,7 @@ from app.core.config import settings
 from app.routers import auth, articles, templates, health
 from app.routers import football
 from app.routers import api as api_router
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from app.routers import api as api_module
 from app.scheduler import start_scheduler
 
@@ -109,6 +109,47 @@ async def peru_summary_legacy():
 @app.get("/peru/table", summary="Legacy: Tabla Liga Perú")
 async def peru_table_legacy(phase: str = Query("Apertura", description="Fase: Apertura o Clausura")):
     return await football.peru_table(phase=phase)
+
+
+# --- Legacy public wrappers for frontend compatibility (no /football prefix) ---
+@app.get("/public/premier/info", summary="Legacy wrapper: Premier League info")
+async def public_premier_info():
+    return await football.premier_info()
+
+
+@app.get("/public/premier/standings", summary="Legacy wrapper: Premier League standings")
+async def public_premier_standings(season: Optional[int] = None):
+    return await football.premier_standings(season=season)
+
+
+@app.get("/public/premier/fixtures", summary="Legacy wrapper: Premier League fixtures")
+async def public_premier_fixtures(next: int = Query(10, ge=1, le=100)):
+    return await football.premier_fixtures(next=next)
+
+
+@app.get("/public/seriea/info", summary="Legacy wrapper: Serie A info")
+async def public_seriea_info():
+    return await football.seriea_info()
+
+
+@app.get("/public/seriea/standings", summary="Legacy wrapper: Serie A standings")
+async def public_seriea_standings(season: Optional[int] = None):
+    return await football.seriea_standings(season=season)
+
+
+@app.get("/public/seriea/fixtures", summary="Legacy wrapper: Serie A fixtures")
+async def public_seriea_fixtures(next: int = Query(10, ge=1, le=100)):
+    return await football.seriea_fixtures(next=next)
+
+
+@app.get("/public/premier/top-scorers", summary="Legacy wrapper: Premier League top scorers")
+async def public_premier_top_scorers(season: Optional[int] = None):
+    return await football.premier_top_scorers(season=season)
+
+
+@app.get("/public/seriea/top-scorers", summary="Legacy wrapper: Serie A top scorers")
+async def public_seriea_top_scorers(season: Optional[int] = None):
+    return await football.seriea_top_scorers(season=season)
 
 
 if __name__ == "__main__":

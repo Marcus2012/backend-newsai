@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     API_SPORTS_BASE: str = "https://v3.football.api-sports.io"
     PERU_LEAGUE_ID: int = 281
     PERU_SEASON: int = 2025
+    # Additional leagues
+    PREMIER_LEAGUE_ID: int = 39
+    PREMIER_SEASON: int = 2025
+    SERIEA_LEAGUE_ID: int = 135
+    SERIEA_SEASON: int = 2025
     """Application settings loaded from environment variables"""
     
     # Application
