@@ -48,7 +48,7 @@ cp .env.production .env.prod.local
 - `GROQ_API_KEY` - API key de Groq
 - `SECRET_KEY` - Clave secreta para JWT (generar una nueva)
 - `WP_AUTH_TOKEN` - Token de WordPress
-- `FOOTYSTATS_API_KEY` - API key de FootyStats
+- `SPORTMONKS_API_TOKEN` - Token de Sportmonks
 
 ### 2. Crear Secretos en Google Cloud
 
@@ -61,7 +61,7 @@ gcloud secrets create GEMINI_API_KEY --data-file=- < <(echo "tu_gemini_key")
 gcloud secrets create GROQ_API_KEY --data-file=- < <(echo "tu_groq_key")
 gcloud secrets create SECRET_KEY --data-file=- < <(echo "tu_secret_key")
 gcloud secrets create WP_AUTH_TOKEN --data-file=- < <(echo "tu_wp_token")
-gcloud secrets create FOOTYSTATS_API_KEY --data-file=- < <(echo "tu_footystats_key")
+gcloud secrets create SPORTMONKS_API_TOKEN --data-file=- < <(echo "tu_sportmonks_token")
 
 # Ver secretos creados
 gcloud secrets list
@@ -121,7 +121,7 @@ GEMINI_API_KEY=GEMINI_API_KEY:latest,\
 GROQ_API_KEY=GROQ_API_KEY:latest,\
 SECRET_KEY=SECRET_KEY:latest,\
 WP_AUTH_TOKEN=WP_AUTH_TOKEN:latest,\
-FOOTYSTATS_API_KEY=FOOTYSTATS_API_KEY:latest
+SPORTMONKS_API_TOKEN=SPORTMONKS_API_TOKEN:latest
 ```
 
 ---

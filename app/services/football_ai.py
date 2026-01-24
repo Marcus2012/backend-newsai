@@ -102,17 +102,7 @@ def _fallback_prediction(match: Dict[str, Any], reason: str) -> Dict[str, Any]:
 
 async def predict_match(match: Dict[str, Any]) -> Dict[str, Any]:
     """Predice el resultado de un partido usando Gemini."""
-    # Try to compute a statistical scoreline first (if API-SPORTS IDs available)
-    stat_scoreline = None
-    stat_prob = None
-    try:
-        from app.services.poisson import estimate_scoreline_from_match
-
-        stat_scoreline, stat_prob = await estimate_scoreline_from_match(match)
-    except Exception:
-        stat_scoreline, stat_prob = None, None
-
-    prompt = _build_prompt(match, stat_scoreline=stat_scoreline, stat_prob=stat_prob)
+    prompt = _build_prompt(match)
     try:
         return await asyncio.to_thread(_predict_sync, prompt)
     except Exception as exc:

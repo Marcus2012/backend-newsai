@@ -1,305 +1,112 @@
 """
-Football Router - FootyStats proxy endpoints
+Football Router - compatibilidad para frontend usando Sportmonks
 """
-from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import date as date_type
 from typing import Any, Dict, Optional
-import httpx
-from app.services import footystats, football_ai
-import httpx
-from app.utils.auth import get_current_user
+
+from fastapi import APIRouter, HTTPException, Query
+
 from app.core.config import settings
-import os
+from app.routers.sportmonks import call_sportmonks
 
 router = APIRouter()
 
-# --- API-SPORTS Token y constantes desde settings/env ---
-API_SPORTS_KEY = getattr(settings, "API_SPORTS_KEY", "")
-API_SPORTS_BASE = getattr(settings, "API_SPORTS_BASE", "https://v3.football.api-sports.io")
-PERU_LEAGUE_ID = int(getattr(settings, "PERU_LEAGUE_ID", 281))
-SEASON = int(getattr(settings, "PERU_SEASON", 2025))
-PREMIER_LEAGUE_ID = int(getattr(settings, "PREMIER_LEAGUE_ID", 39))
-PREMIER_SEASON = int(getattr(settings, "PREMIER_SEASON", 2025))
-SERIEA_LEAGUE_ID = int(getattr(settings, "SERIEA_LEAGUE_ID", 135))
-SERIEA_SEASON = int(getattr(settings, "SERIEA_SEASON", 2025))
-
-# --- Helper para requests API-SPORTS ---
-async def api_sports_get(endpoint: str, params: dict = None):
-    headers = {"x-apisports-key": API_SPORTS_KEY}
-    url = f"{API_SPORTS_BASE}{endpoint}"
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers=headers, params=params)
-        if resp.status_code != 200:
-            raise HTTPException(status_code=502, detail=f"API-SPORTS error: {resp.text}")
-        return resp.json()
+SPORTMONKS_CONFIG: Dict[str, Dict[str, int]] = {
+    "premier-league": {
+        "league_id": settings.SPORTMONKS_PREMIER_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_PREMIER_SEASON_ID,
+    },
+    "serie-a": {
+        "league_id": settings.SPORTMONKS_SERIEA_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_SERIEA_SEASON_ID,
+    },
+}
 
 
-# --- Endpoint: Tabla de posiciones Liga Perú (Apertura/Clausura) ---
-@router.get("/peru/table", summary="Tabla de posiciones Liga Perú (API-SPORTS)")
-async def peru_table(phase: str = Query("Apertura", enum=["Apertura", "Clausura"], description="Fase: Apertura o Clausura")):
-    round_param = f"{phase} - 1"
-    # Buscar el round actual para la fase
-    rounds_data = await api_sports_get("/fixtures/rounds", {"league": PERU_LEAGUE_ID, "season": SEASON})
-    rounds = rounds_data.get("response", [])
-    # Buscar el último round jugado de la fase
-    last_round = next((r for r in reversed(rounds) if phase in r), round_param)
-    standings_data = await api_sports_get("/standings", {"league": PERU_LEAGUE_ID, "season": SEASON})
-    standings = standings_data.get("response", [{}])[0].get("league", {}).get("standings", [[]])[0]
-    return {"phase": phase, "round": last_round, "standings": standings}
-
-# --- Endpoint: Predicción IA Gemini para un partido ---
-@router.get("/matches/{match_id}/predict", summary="Predicción IA Gemini para un partido")
-async def predict_match_ai(match_id: int):
-    # Obtener datos del partido desde API-SPORTS
-    fixture_data = await api_sports_get("/fixtures", {"id": match_id})
-    fixture = fixture_data.get("response", [{}])[0]
-    if not fixture:
-        raise HTTPException(status_code=404, detail="Partido no encontrado")
-    # Llamar a la IA para predecir
-    from app.services.football_ai import predict_match
-    prediction = await predict_match(fixture)
-    return {"match_id": match_id, "fixture": fixture, "prediction": prediction}
+def _get_slug_config(slug: str) -> Dict[str, int]:
+    cfg = SPORTMONKS_CONFIG.get(slug)
+    if not cfg:
+        raise HTTPException(status_code=404, detail="Liga no configurada")
+    return cfg
 
 
-# --- Endpoint: Resumen últimos partidos y estadísticas globales Liga Perú ---
-@router.get("/peru/summary", summary="Resumen y estadísticas Liga Perú (API-SPORTS)")
-async def peru_summary():
-    # Últimos partidos
-    fixtures_data = await api_sports_get("/fixtures", {"league": PERU_LEAGUE_ID, "season": SEASON, "last": 5})
-    last_fixtures = fixtures_data.get("response", [])
-    # Estadísticas generales
-    stats_data = await api_sports_get("/leagues", {"id": PERU_LEAGUE_ID})
-    league_info = stats_data.get("response", [{}])[0]
-    return {"last_fixtures": last_fixtures, "league_info": league_info}
+async def _get_current_season_id(league_id: int) -> Optional[int]:
+    data = await call_sportmonks(f"leagues/{league_id}", {"include": "currentSeason"})
+    season = (data.get("data") or {}).get("currentseason")
+    if isinstance(season, dict):
+        return season.get("id")
+    return None
 
 
-# --- Public endpoints for Premier League (England) ---
-@router.get("/public/premier/info", summary="Premier League info (public)")
+def _filter_fixtures_by_league(
+    payload: Dict[str, Any],
+    league_id: int,
+    season_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    data = payload.get("data")
+    if isinstance(data, list):
+        filtered = [item for item in data if item.get("league_id") == league_id]
+        if season_id is not None:
+            filtered = [item for item in filtered if item.get("season_id") == season_id]
+        new_payload = dict(payload)
+        new_payload["data"] = filtered
+        return new_payload
+    return payload
+
+
+@router.get("/public/premier/info", summary="Premier League info (Sportmonks)")
 async def premier_info():
-    data = await api_sports_get("/leagues", {"id": PREMIER_LEAGUE_ID})
-    return data
+    cfg = _get_slug_config("premier-league")
+    return await call_sportmonks(f"leagues/{cfg['league_id']}", {"include": "currentSeason"})
 
 
-@router.get("/public/premier/standings", summary="Premier League standings (public)")
-async def premier_standings(season: Optional[int] = None):
-    season = season or PREMIER_SEASON
-    data = await api_sports_get("/standings", {"league": PREMIER_LEAGUE_ID, "season": season})
-    return data
+@router.get("/public/premier/standings", summary="Premier League standings (Sportmonks)")
+async def premier_standings(season_id: Optional[int] = None):
+    cfg = _get_slug_config("premier-league")
+    sid = season_id or cfg["season_id"]
+    return await call_sportmonks(f"standings/seasons/{sid}", {"include": "participant"})
 
 
-@router.get("/public/premier/fixtures", summary="Premier League upcoming fixtures (public)")
-async def premier_fixtures(next: int = Query(10, ge=1, le=100)):
-    data = await api_sports_get("/fixtures", {"league": PREMIER_LEAGUE_ID, "next": next})
-    return data
+@router.get("/public/premier/fixtures", summary="Premier League fixtures (Sportmonks)")
+async def premier_fixtures(
+    date: Optional[date_type] = Query(None, description="Fecha YYYY-MM-DD"),
+):
+    cfg = _get_slug_config("premier-league")
+    target_date = (date or date_type.today()).isoformat()
+    season_id = await _get_current_season_id(cfg["league_id"]) or cfg["season_id"]
+    params = {
+        "include": "participants;scores",
+    }
+    payload = await call_sportmonks(f"fixtures/date/{target_date}", params=params)
+    return _filter_fixtures_by_league(payload, cfg["league_id"], season_id=season_id)
 
 
-# --- Public endpoints for Serie A (Italy) ---
-@router.get("/public/seriea/info", summary="Serie A info (public)")
+@router.get("/public/seriea/info", summary="Serie A info (Sportmonks)")
 async def seriea_info():
-    data = await api_sports_get("/leagues", {"id": SERIEA_LEAGUE_ID})
-    return data
+    cfg = _get_slug_config("serie-a")
+    return await call_sportmonks(f"leagues/{cfg['league_id']}", {"include": "currentSeason"})
 
 
-@router.get("/public/seriea/standings", summary="Serie A standings (public)")
-async def seriea_standings(season: Optional[int] = None):
-    season = season or SERIEA_SEASON
-    data = await api_sports_get("/standings", {"league": SERIEA_LEAGUE_ID, "season": season})
-    return data
+@router.get("/public/seriea/standings", summary="Serie A standings (Sportmonks)")
+async def seriea_standings(season_id: Optional[int] = None):
+    cfg = _get_slug_config("serie-a")
+    sid = season_id or cfg["season_id"]
+    if not season_id:
+        current = await _get_current_season_id(cfg["league_id"])
+        if current:
+            sid = current
+    return await call_sportmonks(f"standings/seasons/{sid}", {"include": "participant"})
 
 
-@router.get("/public/seriea/fixtures", summary="Serie A upcoming fixtures (public)")
-async def seriea_fixtures(next: int = Query(10, ge=1, le=100)):
-    data = await api_sports_get("/fixtures", {"league": SERIEA_LEAGUE_ID, "next": next})
-    return data
-
-
-# --- Top scorers (public) ---
-@router.get("/public/premier/top-scorers", summary="Premier League top scorers (public)")
-async def premier_top_scorers(season: Optional[int] = None):
-    season = season or PREMIER_SEASON
-    data = await api_sports_get("/players/topscorers", {"league": PREMIER_LEAGUE_ID, "season": season})
-    return data
-
-
-@router.get("/public/seriea/top-scorers", summary="Serie A top scorers (public)")
-async def seriea_top_scorers(season: Optional[int] = None):
-    season = season or SERIEA_SEASON
-    data = await api_sports_get("/players/topscorers", {"league": SERIEA_LEAGUE_ID, "season": season})
-    return data
-
-
-@router.get("/presets", summary="List preset leagues")
-async def list_presets(current_user: str = Depends(get_current_user)) -> Dict[str, Any]:
-    presets = settings.footystats_presets
-    return {"presets": presets}
-
-
-@router.get("/leagues", summary="League list")
-async def league_list(current_user: str = Depends(get_current_user)) -> Dict[str, Any]:
-    return await footystats.get_league_list()
-
-
-@router.get("/seasons/{season_id}", summary="League season stats")
-async def league_season(
-    season_id: int,
-    current_user: str = Depends(get_current_user)
+@router.get("/public/seriea/fixtures", summary="Serie A fixtures (Sportmonks)")
+async def seriea_fixtures(
+    date: Optional[date_type] = Query(None, description="Fecha YYYY-MM-DD"),
 ):
-    return await footystats.get_league_season(season_id=season_id)
-
-
-@router.get("/seasons/{season_id}/teams", summary="Teams in a season")
-async def league_teams(
-    season_id: int,
-    include: Optional[str] = Query("stats", description="Optional include flag, e.g. 'stats'"),
-    current_user: str = Depends(get_current_user)
-):
-    return await footystats.get_league_teams(season_id=season_id, include=include)
-
-
-@router.get("/presets/{alias}/standings", summary="Standings for preset league")
-async def get_preset_standings(
-    alias: str,
-    season: Optional[int] = Query(None, description="Season year, e.g. 2024"),
-    season_id: Optional[int] = Query(None, description="FootyStats season_id override"),
-    current_user: str = Depends(get_current_user)
-):
-    preset = footystats.get_preset_league(alias)
-    if not preset:
-        raise HTTPException(status_code=404, detail="Preset no encontrado")
-
-    league_id = preset.get("league_id")
-    preset_season = season or preset.get("season")
-    preset_season_id = season_id or preset.get("season_id")
-
-    if not league_id and not preset_season_id:
-        raise HTTPException(status_code=400, detail="Preset requiere league_id o season_id")
-
-    return await footystats.get_league(
-        league_id=league_id,
-        season=preset_season,
-        season_id=preset_season_id,
-    )
-
-
-@router.get("/leagues/{league_id}/standings", summary="League standings")
-async def league_standings(
-    league_id: int,
-    season: Optional[int] = Query(None, description="Season year, e.g. 2024"),
-    season_id: Optional[int] = Query(None, description="FootyStats season_id"),
-    current_user: str = Depends(get_current_user)
-):
-    return await footystats.get_league(league_id=league_id, season=season, season_id=season_id)
-
-
-@router.get("/leagues/{league_id}/fixtures", summary="League fixtures")
-async def league_fixtures(
-    league_id: int,
-    season: Optional[int] = Query(None, description="Season year"),
-    season_id: Optional[int] = Query(None, description="FootyStats season_id"),
-    date_from: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
-    date_to: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
-    page: Optional[int] = Query(None, description="Pagination page if supported"),
-    current_user: str = Depends(get_current_user)
-):
-    return await footystats.get_matches(
-        league_id=league_id,
-        season=season,
-        season_id=season_id,
-        date_from=date_from,
-        date_to=date_to,
-        page=page,
-    )
-
-
-@router.get("/fixtures/upcoming", summary="Upcoming fixtures for a league")
-async def upcoming_fixtures(
-    league_id: Optional[int] = Query(None, description="League id from FootyStats"),
-    season: Optional[int] = Query(None, description="Season year"),
-    season_id: Optional[int] = Query(None, description="FootyStats season_id"),
-    days_ahead: int = Query(7, ge=1, le=60, description="How many days ahead to look"),
-    limit: int = Query(10, ge=1, le=50, description="How many matches to return"),
-    current_user: str = Depends(get_current_user)
-):
-    today = datetime.utcnow().date()
-    date_from = today.isoformat()
-    date_to = (today + timedelta(days=days_ahead)).isoformat()
-
-    raw = await footystats.get_matches(
-        league_id=league_id,
-        season=season,
-        season_id=season_id,
-        date_from=date_from,
-        date_to=date_to,
-        page=None,
-    )
-
-    def _extract_matches(payload: Any):
-        if isinstance(payload, list):
-            return payload
-        if isinstance(payload, dict):
-            for key in ("data", "matches", "fixtures", "items"):
-                value = payload.get(key)
-                if isinstance(value, list):
-                    return value
-        return []
-
-    matches = _extract_matches(raw)
-
-    def _sort_key(match: Dict[str, Any]):
-        date_value = match.get("date") or match.get("match_date") or match.get("iso_date")
-        try:
-            return datetime.fromisoformat(str(date_value))
-        except Exception:
-            return datetime.max
-
-    sorted_matches = sorted(matches, key=_sort_key)[:limit]
-
-    return {
-        "date_from": date_from,
-        "date_to": date_to,
-        "count": len(sorted_matches),
-        "items": sorted_matches,
+    cfg = _get_slug_config("serie-a")
+    target_date = (date or date_type.today()).isoformat()
+    season_id = await _get_current_season_id(cfg["league_id"]) or cfg["season_id"]
+    params = {
+        "include": "participants;scores",
     }
-
-
-@router.get("/leagues/{league_id}/top-scorers", summary="Top scorers")
-async def league_top_scorers(
-    league_id: int,
-    season: Optional[int] = Query(None, description="Season year"),
-    current_user: str = Depends(get_current_user)
-):
-    return await footystats.get_top_scorers(league_id=league_id, season=season)
-
-
-@router.get("/matches/{match_id}", summary="Match details")
-async def match_detail(
-    match_id: int,
-    current_user: str = Depends(get_current_user)
-):
-    return await footystats.get_match(match_id=match_id)
-
-
-@router.get("/teams/{team_id}", summary="Team details")
-async def team_detail(
-    team_id: int,
-    current_user: str = Depends(get_current_user)
-):
-    return await footystats.get_team(team_id=team_id)
-
-
-@router.post("/matches/{match_id}/predict", summary="AI prediction for a match")
-async def predict_match(
-    match_id: int,
-    current_user: str = Depends(get_current_user)
-):
-    match = await footystats.get_match(match_id=match_id)
-    try:
-        prediction = await football_ai.predict_match(match)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
-    return {
-        "match_id": match_id,
-        "match": match,
-        "prediction": prediction,
-    }
+    payload = await call_sportmonks(f"fixtures/date/{target_date}", params=params)
+    return _filter_fixtures_by_league(payload, cfg["league_id"], season_id=season_id)

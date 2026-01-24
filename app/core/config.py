@@ -7,16 +7,6 @@ import os
 
 
 class Settings(BaseSettings):
-    # API-SPORTS (Liga Perú)
-    API_SPORTS_KEY: str = ""
-    API_SPORTS_BASE: str = "https://v3.football.api-sports.io"
-    PERU_LEAGUE_ID: int = 281
-    PERU_SEASON: int = 2025
-    # Additional leagues
-    PREMIER_LEAGUE_ID: int = 39
-    PREMIER_SEASON: int = 2025
-    SERIEA_LEAGUE_ID: int = 135
-    SERIEA_SEASON: int = 2025
     """Application settings loaded from environment variables"""
     
     # Application
@@ -45,11 +35,13 @@ class Settings(BaseSettings):
     STRAPI_URL: str = ""
     STRAPI_TOKEN: str = ""
 
-    # FootyStats API
-    FOOTYSTATS_API_KEY: str = "f37d0d7b03a98882d9a3672336c2a30d89ade024875637d35b5cd5f224149d0e"
-    FOOTYSTATS_BASE_URL: str = "https://api.football-data-api.com"
-    # Optional JSON mapping of preset leagues, e.g. {"peru_liga1": {"league_id": 3439, "season": 2024}}
-    FOOTYSTATS_PRESET_LEAGUES: str = ""
+    # Sportmonks API (nuevo proveedor de fútbol)
+    SPORTMONKS_API_TOKEN: str = ""
+    SPORTMONKS_BASE_URL: str = "https://api.sportmonks.com/v3/football"
+    SPORTMONKS_PREMIER_LEAGUE_ID: int = 8
+    SPORTMONKS_PREMIER_SEASON_ID: int = 23614
+    SPORTMONKS_SERIEA_LEAGUE_ID: int = 384
+    SPORTMONKS_SERIEA_SEASON_ID: int = 23598
     
     # WordPress
     WP_GRAPHQL_ENDPOINT: str = "https://example.com/graphql"
@@ -94,23 +86,11 @@ class Settings(BaseSettings):
             return []
         return [a.strip() for a in raw.split(',') if a.strip()]
 
-    @property
-    def footystats_presets(self) -> dict:
-        """Return preset leagues mapping as dict"""
-        import json
-
-        raw = (self.FOOTYSTATS_PRESET_LEAGUES or "").strip()
-        if not raw:
-            return {}
-        try:
-            return json.loads(raw)
-        except Exception:
-            return {}
-    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = "ignore"
 
 
 # Singleton instance

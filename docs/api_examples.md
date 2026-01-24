@@ -400,23 +400,6 @@ curl -X GET "http://localhost:8000/admin/articles/id-inexistente" \
 
 ---
 
-## ⚽ API-SPORTS — Ligas añadidas
-
-Base URL (método GET): https://v3.football.api-sports.io/
-
-A. Obtener información general de la liga
-- Premier League (Inglaterra): https://v3.football.api-sports.io/leagues?id=39
-- Serie A (Italia): https://v3.football.api-sports.io/leagues?id=135
-
-B. Tabla de Posiciones (Standings)
-- Premier League: https://v3.football.api-sports.io/standings?league=39&season=2025
-- Serie A: https://v3.football.api-sports.io/standings?league=135&season=2025
-
-C. Próximos Partidos (Fixtures)
-- Premier League: https://v3.football.api-sports.io/fixtures?league=39&next=10
-- Serie A: https://v3.football.api-sports.io/fixtures?league=135&next=10
-
-
 **Respuesta:**
 ```json
 {
@@ -583,88 +566,32 @@ echo "✓ Publicado en WordPress con ID: $WP_ID"
 
 ---
 
-## ⚽ FootyStats (Fútbol)
+## ⚽ Sportmonks (Fútbol)
 
-### 1. Listar ligas reales desde FootyStats
-
-```bash
-curl -X GET "http://localhost:8000/football/leagues" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-**Nota:** la respuesta incluye `league_id`, `name`, `country` y temporadas disponibles. Usa estos `league_id` reales para los siguientes endpoints.
-
-### 2. Listar ligas preconfiguradas (presets)
+### 1. Info de liga (Premier League)
 
 ```bash
-curl -X GET "http://localhost:8000/football/presets" \
-  -H "Authorization: Bearer $TOKEN"
+curl -X GET "http://localhost:8000/leagues/premier-league"
 ```
 
-**Nota:** configura el JSON de presets en la variable de entorno `FOOTYSTATS_PRESET_LEAGUES` (ejemplo: `{ "peru_liga1": { "league_id": 3439, "season": 2024 } }`).
-
-### 3. Próximos partidos de una liga (real API)
+### 2. Tabla de posiciones (Premier League)
 
 ```bash
-LEAGUE_ID=1963   # usa un id real obtenido en el paso 1
-curl -X GET "http://localhost:8000/football/fixtures/upcoming?league_id=$LEAGUE_ID&days_ahead=7&limit=5" \
-  -H "Authorization: Bearer $TOKEN"
+curl -X GET "http://localhost:8000/standings/premier-league"
 ```
 
-**Respuesta (ejemplo):**
-```json
-{
-  "date_from": "2025-05-21",
-  "date_to": "2025-05-28",
-  "count": 5,
-  "items": [
-    {
-      "match_id": 123456,
-      "date": "2025-05-23",
-      "home_name": "Manchester City",
-      "away_name": "Liverpool"
-    }
-  ]
-}
-```
-
-### 4. Predicción con IA para un partido
+### 3. Partidos por fecha (Premier League)
 
 ```bash
-MATCH_ID=123456   # toma el id de la lista de próximos partidos
-curl -X POST "http://localhost:8000/football/matches/$MATCH_ID/predict" \
-  -H "Authorization: Bearer $TOKEN"
+curl -X GET "http://localhost:8000/fixtures/premier-league?date=2026-01-23"
 ```
 
-**Respuesta (ejemplo):**
-```json
-{
-  "match_id": 123456,
-  "prediction": {
-    "winner": "home",
-    "scoreline": "2-1",
-    "confidence": 72,
-    "reasons": [
-      "Local con mejor racha",
-      "Ataque superior en las ultimas fechas"
-    ]
-  }
-}
-```
-
-### 5. Tabla de posiciones (preset Perú Liga 1)
+### 4. Serie A (info, tabla y fixtures)
 
 ```bash
-curl -X GET "http://localhost:8000/football/presets/peru_liga1/standings" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### 6. Fixtures de una liga específica (ej. Premier League)
-
-```bash
-LEAGUE_ID=1963   # ejemplo real obtenido en el paso 1
-curl -X GET "http://localhost:8000/football/leagues/$LEAGUE_ID/fixtures?season=2024" \
-  -H "Authorization: Bearer $TOKEN"
+curl -X GET "http://localhost:8000/leagues/serie-a"
+curl -X GET "http://localhost:8000/standings/serie-a"
+curl -X GET "http://localhost:8000/fixtures/serie-a?date=2026-01-23"
 ```
 
 ---

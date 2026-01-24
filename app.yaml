@@ -14,7 +14,7 @@ env_variables:
   # - GROQ_API_KEY
   # - SECRET_KEY
   # - WP_AUTH_TOKEN
-  # - FOOTYSTATS_API_KEY
+  # - SPORTMONKS_API_TOKEN
   UVICORN_TIMEOUT_KEEP_ALIVE: "65"
 
 # Resource allocation

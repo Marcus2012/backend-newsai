@@ -1,2 +1,2 @@
 # API Routers
-from . import auth, articles, templates, health
+from . import auth, articles, templates, health, sportmonks, football

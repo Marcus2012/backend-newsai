@@ -26,7 +26,7 @@ gcloud secrets create GEMINI_API_KEY --data-file=- < <(grep "^GEMINI_API_KEY=" .
 gcloud secrets create GROQ_API_KEY --data-file=- < <(grep "^GROQ_API_KEY=" .env.production | cut -d'=' -f2-)
 gcloud secrets create SECRET_KEY --data-file=- < <(grep "^SECRET_KEY=" .env.production | cut -d'=' -f2-)
 gcloud secrets create WP_AUTH_TOKEN --data-file=- < <(grep "^WP_AUTH_TOKEN=" .env.production | cut -d'=' -f2-)
-gcloud secrets create FOOTYSTATS_API_KEY --data-file=- < <(grep "^FOOTYSTATS_API_KEY=" .env.production | cut -d'=' -f2-)
+gcloud secrets create SPORTMONKS_API_TOKEN --data-file=- < <(grep "^SPORTMONKS_API_TOKEN=" .env.production | cut -d'=' -f2-)
 
 # Verificar que los secretos existen
 gcloud secrets list
