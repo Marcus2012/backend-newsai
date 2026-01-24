@@ -26,6 +26,51 @@ SPORTMONKS_CONFIG: Dict[str, Dict[str, int]] = {
 }
 
 
+def _extract_standing_summary(details: Optional[list]) -> Dict[str, Optional[int]]:
+    if not details:
+        return {
+            "played": None,
+            "won": None,
+            "draw": None,
+            "lost": None,
+            "goals_for": None,
+            "goals_against": None,
+            "goal_difference": None,
+            "points": None,
+        }
+
+    by_code: Dict[str, int] = {}
+    for item in details:
+        code = (item.get("type") or {}).get("code")
+        value = item.get("value")
+        if code is not None and value is not None:
+            by_code[code] = value
+
+    return {
+        "played": by_code.get("overall-matches-played"),
+        "won": by_code.get("overall-won"),
+        "draw": by_code.get("overall-draw"),
+        "lost": by_code.get("overall-lost"),
+        "goals_for": by_code.get("overall-goals-for"),
+        "goals_against": by_code.get("overall-goals-against"),
+        "goal_difference": by_code.get("goal-difference"),
+        "points": by_code.get("overall-points"),
+    }
+
+
+def _summary_to_table(summary: Dict[str, Optional[int]]) -> Dict[str, Optional[int]]:
+    return {
+        "pj": summary.get("played"),
+        "pg": summary.get("won"),
+        "pe": summary.get("draw"),
+        "pp": summary.get("lost"),
+        "gf": summary.get("goals_for"),
+        "gc": summary.get("goals_against"),
+        "dg": summary.get("goal_difference"),
+        "pts": summary.get("points"),
+    }
+
+
 def _get_slug_config(slug: str) -> Dict[str, int]:
     cfg = SPORTMONKS_CONFIG.get(slug)
     if not cfg:
@@ -65,10 +110,19 @@ async def get_league_info(slug: str):
 async def get_league_standings(slug: str):
     cfg = _get_slug_config(slug)
     season_id = cfg["season_id"]
-    return await call_sportmonks(
+    data = await call_sportmonks(
         "standings",
-        {"seasons": season_id, "include": "participant"},
+        {"seasons": season_id, "include": "participant;details.type"},
     )
+
+    standings = data.get("data", [])
+    if isinstance(standings, list):
+        for item in standings:
+            summary = _extract_standing_summary(item.get("details"))
+            item["summary"] = summary
+            item["table"] = _summary_to_table(summary)
+
+    return data
 
 
 @router.get("/fixtures/{slug}", summary="Partidos por fecha (Sportmonks)")
