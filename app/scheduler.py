@@ -3,7 +3,7 @@ Scheduler - Automated scraping jobs using APScheduler
 """
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, urlparse, urlunparse
 import re
 from sqlalchemy import select
@@ -17,6 +17,56 @@ from app.services.gemini import generate_article
 
 
 scheduler = AsyncIOScheduler()
+
+
+def _format_category(value: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        return "General"
+    value = value.replace("-", " ").replace("_", " ").strip()
+    return value.title()
+
+
+def _derive_category_from_list_url(list_url: str) -> str:
+    try:
+        normalized = (list_url or "").strip().rstrip("/")
+    except Exception:
+        normalized = ""
+
+    explicit_map = {
+        "https://rpp.pe/futbol/descentralizado": "Liga 1",
+        "https://rpp.pe/futbol/champions-league": "Champions League",
+        "https://www.espn.com.pe/futbol/liga/_/nombre/ita.1": "Serie A - Italia",
+    }
+    if normalized in explicit_map:
+        return explicit_map[normalized]
+
+    try:
+        parsed = urlparse(normalized)
+        segments = [s for s in parsed.path.split("/") if s]
+    except Exception:
+        segments = []
+
+    if not segments:
+        return "General"
+
+    # Prioridad explícita si se detecta fútbol/deportes
+    if "futbol" in segments:
+        return "Fútbol"
+    if "deportes" in segments or "sports" in segments:
+        return "Deportes"
+
+    ignore = {"news", "noticias", "liga", "nombre"}
+    for seg in reversed(segments):
+        if seg in ignore:
+            continue
+        if seg.startswith("_"):
+            continue
+        if "." in seg:
+            continue
+        return _format_category(seg)
+
+    return _format_category(segments[-1])
 
 
 async def scraping_job():
@@ -42,6 +92,7 @@ async def scraping_job():
             
             for url in settings.scrape_urls_list:
                 try:
+                    list_category = _derive_category_from_list_url(url)
                     # Find template for this domain
                     template = next(
                         (t for t in templates if t.domain in url),
@@ -89,6 +140,8 @@ async def scraping_job():
                         try:
                             # Small delay to avoid rate limits but keep flow fast
                             await asyncio.sleep(3)
+
+                            local_now = datetime.now(timezone(timedelta(hours=-5)))
                             
                             detail_data = await scrape_url(article_url, scraping_type="article")
                             
@@ -105,7 +158,8 @@ async def scraping_job():
                                 raw_json=detail_data.get("raw_json"),
                                 scraper_template=str(template.id) if template else None,
                                 scraper_version=template.version if template else "default",
-                                scraped_at=datetime.utcnow()
+                                scraped_at=datetime.utcnow(),
+                                created_at=local_now
                             )
                             
                             db.add(raw_article)
@@ -135,8 +189,10 @@ async def scraping_job():
                                     description=ai_article.get("description") or generation_context,
                                     scraped_body=detail_data.get("body") or raw_article.scraped_body,
                                     seo_meta=ai_article.get("seo"),
+                                    categories=list_category,
                                     image_url=img_url,
-                                    status=StatusEnum.draft
+                                    status=StatusEnum.draft,
+                                    created_at=local_now
                                 )
                             except Exception as e:
                                 print(f"      ⚠️ Error generando artículo IA: {e}")
@@ -152,8 +208,10 @@ async def scraping_job():
                                     description=fallback_description,
                                     scraped_body=detail_data.get("body") or raw_article.scraped_body,
                                     seo_meta=None,
+                                    categories=list_category,
                                     image_url=img_url,
-                                    status=StatusEnum.draft
+                                    status=StatusEnum.draft,
+                                    created_at=local_now
                                 )
                             db.add(generated_article)
 

@@ -60,6 +60,7 @@ class GeneratedArticle(Base):
     description = Column(Text, nullable=False)
     scraped_body = Column(MEDIUMTEXT, nullable=True)
     seo_meta = Column(JSON, nullable=True)
+    categories = Column(Text, nullable=True)
     image_url = Column(Text, nullable=True)
     status = Column(Enum(StatusEnum), default=StatusEnum.draft, index=True)
     wp_post_id = Column(String(255), nullable=True)

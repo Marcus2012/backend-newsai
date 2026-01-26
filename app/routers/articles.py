@@ -13,10 +13,10 @@ Articles Router - CRUD operations for generated articles
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.core.database import get_db
 from app.core.models import GeneratedArticle, RawArticle, StatusEnum
@@ -31,14 +31,27 @@ router = APIRouter()
 @router.post("/sync-strapi", summary="Sincroniza artículos a Strapi")
 async def sync_strapi_articles(
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: str = Depends(get_current_user),
+    debug: bool = Query(False, description="Include debug info in response"),
+    latest_window_minutes: int = Query(360, ge=1, le=1440, description="Window (minutes) to include latest batch")
 ):
     """
     Sincroniza los artículos generados a Strapi CMS usando la API REST de Strapi.
     """
-    # 1. Obtener los artículos desde la base de datos
-    result = await db.execute(select(GeneratedArticle))
-    articles = result.scalars().all()
+    # 1. Obtener los artículos desde la base de datos (última fecha/hora)
+    latest_result = await db.execute(select(func.max(GeneratedArticle.created_at)))
+    latest_created_at = latest_result.scalar_one_or_none()
+
+    if latest_created_at:
+        window_start = latest_created_at - timedelta(minutes=latest_window_minutes)
+        result = await db.execute(
+            select(GeneratedArticle).where(GeneratedArticle.created_at >= window_start)
+        )
+        articles = result.scalars().all()
+    else:
+        articles = []
+
+    article_count = len(articles)
 
     # 2. Configuración de Strapi (obligatorio en entorno de producción)
     # STRAPI_URL debe apuntar al endpoint público de Strapi (ej: https://mi-strapi.example.com/api/articles)
@@ -146,6 +159,11 @@ async def sync_strapi_articles(
                 "content": content_value,
             }
 
+            # Mapear categorías desde generated_articles
+            category_value = getattr(article, "categories", None)
+            if category_value:
+                data["category"] = category_value
+
             # Mapear `seo_meta` a la estructura esperada por Strapi (ver panel SEO)
             try:
                 seo = getattr(article, "seo_meta", None)
@@ -250,7 +268,7 @@ async def sync_strapi_articles(
             # Response body (recortado si es largo)
 
             if resp.status_code in (200, 201):
-                results.append({"title": article.title, "status": "ok"})
+                results.append({"title": article.title, "status": "ok", "status_code": resp.status_code})
                 continue
 
             # para 400, intentar identificar errores de validación (p.ej. slug único)
@@ -300,11 +318,38 @@ async def sync_strapi_articles(
                     except Exception:
                         pass
 
-                results.append({"title": article.title, "status": "error", "detail": j or body_snippet})
+                error_payload = {
+                    "title": article.title,
+                    "status": "error",
+                    "status_code": resp.status_code,
+                    "detail": j or body_snippet,
+                }
+                if debug:
+                    error_payload["response_body"] = body_snippet
+                results.append(error_payload)
                 continue
 
             # otros códigos
-            results.append({"title": article.title, "status": "error", "detail": resp.text})
+            error_payload = {
+                "title": article.title,
+                "status": "error",
+                "status_code": resp.status_code,
+                "detail": resp.text,
+            }
+            if debug:
+                error_payload["response_body"] = body_snippet
+            results.append(error_payload)
+
+    if debug:
+        return {
+            "synced": results,
+            "meta": {
+                "latest_created_at": latest_created_at.isoformat() if latest_created_at else None,
+                "latest_window_minutes": latest_window_minutes,
+                "articles_count": article_count,
+                "collection_url": collection_url,
+            },
+        }
 
     return {"synced": results}
 
@@ -354,6 +399,7 @@ async def get_articles(
     db: AsyncSession = Depends(get_db),
     current_user: str = Depends(get_current_user),
     status_filter: Optional[str] = Query(None, description="Filter by status"),
+    latest_only: bool = Query(False, description="Only latest batch by created_at"),
     skip: int = Query(0, ge=0, description="Records to skip"),
     limit: int = Query(10, ge=1, le=100, description="Records limit")
 ):
@@ -378,6 +424,14 @@ async def get_articles(
             query = query.where(GeneratedArticle.status == status_enum)
         except KeyError:
             raise HTTPException(status_code=400, detail="Estado inválido")
+
+    if latest_only:
+        latest_result = await db.execute(select(func.max(GeneratedArticle.created_at)))
+        latest_created_at = latest_result.scalar_one_or_none()
+        if latest_created_at:
+            query = query.where(GeneratedArticle.created_at == latest_created_at)
+        else:
+            return []
     
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
