@@ -93,10 +93,18 @@ async def run_scheduled_scrape(
     - Si background=true, dispara el job en segundo plano y responde inmediato.
     """
     configured_audience = (settings.CLOUD_SCHEDULER_AUDIENCE or "").strip()
-    base_url = str(request.base_url).rstrip("/")
+    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").strip()
+    forwarded_host = (request.headers.get("x-forwarded-host") or "").strip()
+    host = forwarded_host or (request.headers.get("host") or "").strip()
+    proto = forwarded_proto or request.url.scheme
+    base_url = f"{proto}://{host}" if host else str(request.base_url).rstrip("/")
     full_url = str(request.url)
     full_url_no_query = full_url.split("?", 1)[0]
     audiences = [configured_audience, base_url, full_url_no_query, full_url]
+    if base_url.startswith("http://"):
+        audiences.append(base_url.replace("http://", "https://", 1))
+    if full_url_no_query.startswith("http://"):
+        audiences.append(full_url_no_query.replace("http://", "https://", 1))
     _verify_scheduler_oidc(authorization, audiences)
 
     if background:
