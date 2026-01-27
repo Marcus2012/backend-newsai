@@ -67,7 +67,8 @@ GEMINI_API_KEY=GEMINI_API_KEY:latest,\
 GROQ_API_KEY=GROQ_API_KEY:latest,\
 SECRET_KEY=SECRET_KEY:latest,\
 WP_AUTH_TOKEN=WP_AUTH_TOKEN:latest,\
-SPORTMONKS_API_TOKEN=SPORTMONKS_API_TOKEN:latest \
+SPORTMONKS_API_TOKEN=SPORTMONKS_API_TOKEN:latest,\
+SCRAPE_URLS=SCRAPE_URLS:latest \
     --format json
 
 echo -e "${GREEN}✅ Deployment completed successfully!${NC}"
