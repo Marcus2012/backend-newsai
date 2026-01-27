@@ -20,10 +20,10 @@ from app.core.config import settings
 from app.routers import auth, articles, templates, health
 from app.routers import football
 from app.routers import api as api_router
+from app.routers import scheduler as scheduler_router
 from app.routers import sportmonks
 from typing import Dict, Any
 from app.routers import api as api_module
-from app.scheduler import start_scheduler
 
 
 @asynccontextmanager
@@ -35,13 +35,6 @@ async def lifespan(app: FastAPI):
         print("✅ Base de datos inicializada")
     except Exception as e:
         print(f"⚠️ Error inicializando DB (continuando): {e}")
-    
-    # Start scheduler without blocking
-    try:
-        start_scheduler()
-        print("✅ Scheduler iniciado")
-    except Exception as e:
-        print(f"⚠️ Error iniciando scheduler: {e}")
     
     print("✅ Sistema iniciado")
     yield
@@ -83,6 +76,7 @@ app.include_router(health.router, tags=["Health"])
 app.include_router(football.router, prefix="/football", tags=["Football"])
 app.include_router(api_router.router, prefix="/api", tags=["API"])
 app.include_router(sportmonks.router, tags=["Sportmonks"])
+app.include_router(scheduler_router.router, prefix="/scheduler", tags=["Scheduler"])
 
 
 # Compatibilidad: ruta raíz `/predict` usada por algunos frontends

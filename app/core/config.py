@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # Scraping
     SCRAPE_URLS: str = "https://rpp.pe/deportes,https://depor.com/,https://www.espn.com.pe/"
 
+    # Cloud Scheduler (OIDC)
+    CLOUD_SCHEDULER_AUDIENCE: str = ""
+    CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL: str = ""
+
     # Easypromos integration (opcional)
     EASYPROMOS_API_TOKEN: str = ""
     EASYPROMOS_CAMPAIGN_ID: str = ""

@@ -18,6 +18,7 @@ pydantic-settings>=2.1.0
 
 # Authentication
 PyJWT>=2.0.0
+google-auth>=2.27.0
 
 # HTTP Client
 aiohttp>=3.9.0

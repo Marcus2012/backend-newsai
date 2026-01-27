@@ -1,8 +1,6 @@
 """
-Scheduler - Automated scraping jobs using APScheduler
+Scheduler - Scraping job entrypoint (invocado externamente)
 """
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, urlparse, urlunparse
 import re
@@ -14,9 +12,6 @@ from app.core.database import async_session
 from app.core.models import RawArticle, GeneratedArticle, ScraperTemplate, StatusEnum
 from app.services.scrapegraph import scrape_url
 from app.services.gemini import generate_article
-
-
-scheduler = AsyncIOScheduler()
 
 
 def _format_category(value: str) -> str:
@@ -250,23 +245,3 @@ async def scraping_job():
             await db.rollback()
 
 
-def start_scheduler():
-    """
-    Initialize and start the scheduler
-    
-    Configures:
-    - Hourly scraping (10 news per hour)
-    """
-    
-    # Hourly job
-    scheduler.add_job(
-        scraping_job,
-        CronTrigger(minute=0), # Run at the start of every hour
-        id="hourly_scrape",
-        name="Scraping por hora",
-        replace_existing=True
-    )
-    
-    scheduler.start()
-    print("✅ Scheduler iniciado")
-    print("   - Scraping programado: Cada hora (minuto 0)")
