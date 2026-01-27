@@ -3,7 +3,7 @@ Scheduler Router - Endpoints for external schedulers (e.g., Google Cloud Schedul
 """
 from datetime import datetime
 import asyncio
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 import google.auth.transport.requests
@@ -15,11 +15,12 @@ from app.scheduler import scraping_job
 router = APIRouter()
 
 
-def _verify_scheduler_oidc(auth_header: Optional[str], audience: str) -> None:
-    audience = (audience or "").strip().rstrip("/")
+def _verify_scheduler_oidc(auth_header: Optional[str], audiences: List[str]) -> None:
+    audiences = [a.strip() for a in audiences if a and a.strip()]
+    audiences = [a.rstrip("/") for a in audiences]
     expected_email = (settings.CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL or "").strip()
 
-    if not audience:
+    if not audiences:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Audience no configurado"
@@ -34,9 +35,10 @@ def _verify_scheduler_oidc(auth_header: Optional[str], audience: str) -> None:
     token = auth_header.split(" ", 1)[1].strip()
     request = google.auth.transport.requests.Request()
     claims = None
-    audiences_to_try = [audience]
-    if audience:
-        audiences_to_try.append(f"{audience}/")
+    audiences_to_try: List[str] = []
+    for aud in audiences:
+        audiences_to_try.append(aud)
+        audiences_to_try.append(f"{aud}/")
 
     for aud in audiences_to_try:
         try:
@@ -79,10 +81,12 @@ async def run_scheduled_scrape(
     - Requiere header X-Scheduler-Token si CLOUD_SCHEDULER_TOKEN está configurado.
     - Si background=true, dispara el job en segundo plano y responde inmediato.
     """
-    audience = (settings.CLOUD_SCHEDULER_AUDIENCE or "").strip()
-    if not audience:
-        audience = str(request.base_url).rstrip("/")
-    _verify_scheduler_oidc(authorization, audience)
+    configured_audience = (settings.CLOUD_SCHEDULER_AUDIENCE or "").strip()
+    base_url = str(request.base_url).rstrip("/")
+    full_url = str(request.url)
+    full_url_no_query = full_url.split("?", 1)[0]
+    audiences = [configured_audience, base_url, full_url_no_query, full_url]
+    _verify_scheduler_oidc(authorization, audiences)
 
     if background:
         asyncio.create_task(scraping_job())
