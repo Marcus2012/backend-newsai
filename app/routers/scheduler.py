@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 def _verify_scheduler_oidc(auth_header: Optional[str], audience: str) -> None:
-    audience = (audience or "").strip()
+    audience = (audience or "").strip().rstrip("/")
     expected_email = (settings.CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL or "").strip()
 
     if not audience:
@@ -32,10 +32,20 @@ def _verify_scheduler_oidc(auth_header: Optional[str], audience: str) -> None:
         )
 
     token = auth_header.split(" ", 1)[1].strip()
-    try:
-        request = google.auth.transport.requests.Request()
-        claims = id_token.verify_oauth2_token(token, request, audience=audience)
-    except Exception:
+    request = google.auth.transport.requests.Request()
+    claims = None
+    audiences_to_try = [audience]
+    if audience:
+        audiences_to_try.append(f"{audience}/")
+
+    for aud in audiences_to_try:
+        try:
+            claims = id_token.verify_oauth2_token(token, request, audience=aud)
+            break
+        except Exception:
+            continue
+
+    if not claims:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="OIDC token inválido"
