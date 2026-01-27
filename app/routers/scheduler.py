@@ -4,6 +4,7 @@ Scheduler Router - Endpoints for external schedulers (e.g., Google Cloud Schedul
 from datetime import datetime
 import asyncio
 from typing import Optional, List
+import logging
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 import google.auth.transport.requests
@@ -13,6 +14,7 @@ from app.core.config import settings
 from app.scheduler import scraping_job
 
 router = APIRouter()
+logger = logging.getLogger("scheduler")
 
 
 def _verify_scheduler_oidc(auth_header: Optional[str], audiences: List[str]) -> None:
@@ -21,12 +23,14 @@ def _verify_scheduler_oidc(auth_header: Optional[str], audiences: List[str]) -> 
     expected_email = (settings.CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL or "").strip()
 
     if not audiences:
+        logger.error("Scheduler auth: audiencia vacía")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Audience no configurado"
         )
 
     if not auth_header or not auth_header.lower().startswith("bearer "):
+        logger.warning("Scheduler auth: falta Authorization Bearer")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization Bearer requerido"
@@ -48,6 +52,7 @@ def _verify_scheduler_oidc(auth_header: Optional[str], audiences: List[str]) -> 
             continue
 
     if not claims:
+        logger.warning("Scheduler auth: OIDC inválido para audiences=%s", audiences_to_try)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="OIDC token inválido"
@@ -55,6 +60,7 @@ def _verify_scheduler_oidc(auth_header: Optional[str], audiences: List[str]) -> 
 
     issuer = claims.get("iss")
     if issuer not in {"https://accounts.google.com", "accounts.google.com"}:
+        logger.warning("Scheduler auth: issuer inválido %s", issuer)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Issuer inválido"
@@ -63,6 +69,11 @@ def _verify_scheduler_oidc(auth_header: Optional[str], audiences: List[str]) -> 
     if expected_email:
         token_email = claims.get("email")
         if token_email != expected_email:
+            logger.warning(
+                "Scheduler auth: service account no autorizado (token=%s, expected=%s)",
+                token_email,
+                expected_email
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Service account no autorizado"
