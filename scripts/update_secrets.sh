@@ -12,7 +12,23 @@ get() {
   grep -E "^$1=" "$ENV_FILE" | sed -E "s/^$1=//" | sed -E 's/^"(.*)"$/\1/' | sed -E "s/^'(.*)'$/\1/"
 }
 
-declare -a secrets=("DATABASE_URL" "GEMINI_API_KEY" "GROQ_API_KEY" "SECRET_KEY" "WP_AUTH_TOKEN" "SPORTMONKS_API_TOKEN")
+declare -a secrets=(
+  "STRAPI_URL"
+  "STRAPI_TOKEN"
+  "STRAPI_DEV_URL"
+  "STRAPI_DEV_TOKEN"
+  "GEMINI_API_KEY"
+  "DATABASE_URL"
+  "WP_AUTH_TOKEN"
+  "GROQ_API_KEY"
+  "SECRET_KEY"
+  "EASYPROMOS_API_TOKEN"
+  "EASYPROMOS_CAMPAIGN_ID"
+  "EASYPROMOS_API_AUTLOGIN"
+  "EASYPROMOS_PROMO_BASE"
+  "SPORTMONKS_API_TOKEN"
+  "SCRAPE_URLS"
+)
 
 for s in "${secrets[@]}"; do
   val=$(get "$s" || true)
