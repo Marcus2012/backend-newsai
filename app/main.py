@@ -56,13 +56,14 @@ cors_origins = [
     "http://localhost:4200",
     "https://newsai-predictorfutbol.vercel.app", # Production Vercel
     "https://www.asieselfutbol.com",
-    "https://asieselfutbol.com"
+    "https://asieselfutbol.com",
+    "https://asieselfutbol-e5004.web.app"
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app|https://(www\.)?asieselfutbol\.com",
+    allow_origin_regex=r"https://.*\.vercel\.app|https://(www\.)?asieselfutbol\.com|https://.*\.web\.app",
     allow_credentials=True,
     allow_methods=["*"],                         # Include OPTIONS
     allow_headers=["*"],                         # Include Authorization, Content-Type
