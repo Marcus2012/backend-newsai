@@ -41,7 +41,16 @@ for name in $SECRETS; do
   fi
 
   if gcloud secrets describe "$name" --project="$PROJECT_ID" >/dev/null 2>&1; then
-    echo "[EXISTS] $name already exists — skipping"
+    current_value=$(gcloud secrets versions access latest --secret "$name" --project="$PROJECT_ID" 2>/dev/null || true)
+    if [ -z "$current_value" ] && [ -n "$value" ]; then
+      echo "[UPDATE] $name has no accessible latest value — adding new version"
+      printf '%s' "$value" | gcloud secrets versions add "$name" --data-file=- --project="$PROJECT_ID"
+    elif [ "$current_value" = "$value" ]; then
+      echo "[OK] $name already up to date"
+    else
+      echo "[UPDATE] $name differs — adding new version"
+      printf '%s' "$value" | gcloud secrets versions add "$name" --data-file=- --project="$PROJECT_ID"
+    fi
   else
     echo "[CREATE] Creating secret: $name"
     printf '%s' "$value" | gcloud secrets create "$name" --data-file=- --replication-policy="automatic" --project="$PROJECT_ID"
