@@ -23,6 +23,22 @@ SPORTMONKS_CONFIG: Dict[str, Dict[str, int]] = {
         "league_id": settings.SPORTMONKS_SERIEA_LEAGUE_ID,
         "season_id": settings.SPORTMONKS_SERIEA_SEASON_ID,
     },
+    "la-liga": {
+        "league_id": settings.SPORTMONKS_LALIGA_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_LALIGA_SEASON_ID,
+    },
+    "bundesliga": {
+        "league_id": settings.SPORTMONKS_BUNDESLIGA_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_BUNDESLIGA_SEASON_ID,
+    },
+    "ligue-1": {
+        "league_id": settings.SPORTMONKS_LIGUE1_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_LIGUE1_SEASON_ID,
+    },
+    "champions-league": {
+        "league_id": settings.SPORTMONKS_CHAMPIONS_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_CHAMPIONS_SEASON_ID,
+    },
 }
 
 

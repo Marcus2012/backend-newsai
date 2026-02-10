@@ -20,6 +20,22 @@ SPORTMONKS_CONFIG: Dict[str, Dict[str, int]] = {
         "league_id": settings.SPORTMONKS_SERIEA_LEAGUE_ID,
         "season_id": settings.SPORTMONKS_SERIEA_SEASON_ID,
     },
+    "la-liga": {
+        "league_id": settings.SPORTMONKS_LALIGA_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_LALIGA_SEASON_ID,
+    },
+    "bundesliga": {
+        "league_id": settings.SPORTMONKS_BUNDESLIGA_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_BUNDESLIGA_SEASON_ID,
+    },
+    "ligue-1": {
+        "league_id": settings.SPORTMONKS_LIGUE1_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_LIGUE1_SEASON_ID,
+    },
+    "champions-league": {
+        "league_id": settings.SPORTMONKS_CHAMPIONS_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_CHAMPIONS_SEASON_ID,
+    },
 }
 
 
@@ -169,3 +185,48 @@ async def seriea_fixtures(
     }
     payload = await call_sportmonks(f"fixtures/date/{target_date}", params=params)
     return _filter_fixtures_by_league(payload, cfg["league_id"], season_id=season_id)
+
+
+@router.get("/public/{slug}/info", summary="League info (Sportmonks)")
+async def league_info(slug: str):
+    cfg = _get_slug_config(slug)
+    return await call_sportmonks(f"leagues/{cfg['league_id']}", {"include": "currentSeason"})
+
+
+@router.get("/public/{slug}/standings", summary="League standings (Sportmonks)")
+async def league_standings(slug: str, season_id: Optional[int] = None):
+    cfg = _get_slug_config(slug)
+    sid = season_id or cfg["season_id"]
+    if not season_id:
+        current = await _get_current_season_id(cfg["league_id"])
+        if current:
+            sid = current
+    data = await call_sportmonks(f"standings/seasons/{sid}", {"include": "participant;details.type"})
+    standings = data.get("data", [])
+    if isinstance(standings, list):
+        for item in standings:
+            summary = _extract_standing_summary(item.get("details"))
+            item["summary"] = summary
+            item["table"] = _summary_to_table(summary)
+    return data
+
+
+@router.get("/public/{slug}/fixtures", summary="League fixtures (Sportmonks)")
+async def league_fixtures(
+    slug: str,
+    date: Optional[date_type] = Query(None, description="Fecha YYYY-MM-DD"),
+    next: Optional[int] = Query(None, description="Cantidad de partidos a futuro"),
+):
+    cfg = _get_slug_config(slug)
+    target_date = (date or date_type.today()).isoformat()
+    season_id = await _get_current_season_id(cfg["league_id"]) or cfg["season_id"]
+    params = {
+        "include": "participants;scores",
+    }
+    payload = await call_sportmonks(f"fixtures/date/{target_date}", params=params)
+    filtered = _filter_fixtures_by_league(payload, cfg["league_id"], season_id=season_id)
+    if next and isinstance(filtered.get("data"), list):
+        new_payload = dict(filtered)
+        new_payload["data"] = filtered["data"][:next]
+        return new_payload
+    return filtered
