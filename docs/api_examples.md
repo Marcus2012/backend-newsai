@@ -568,6 +568,14 @@ echo "✓ Publicado en WordPress con ID: $WP_ID"
 
 ## ⚽ Sportmonks (Fútbol)
 
+**Slugs disponibles:**
+- premier-league, serie-a, la-liga, bundesliga, ligue-1, champions-league
+- peru-primera, peru-segunda
+- argentina-liga-profesional, argentina-copa-argentina
+- brasil-serie-a, colombia-liga-betplay, ecuador-liga-pro
+- usa-mls, mexico-liga-mx
+- copa-libertadores, copa-sudamericana
+
 ### 1. Info de liga (Premier League)
 
 ```bash

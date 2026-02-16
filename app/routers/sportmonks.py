@@ -39,6 +39,50 @@ SPORTMONKS_CONFIG: Dict[str, Dict[str, int]] = {
         "league_id": settings.SPORTMONKS_CHAMPIONS_LEAGUE_ID,
         "season_id": settings.SPORTMONKS_CHAMPIONS_SEASON_ID,
     },
+    "peru-primera": {
+        "league_id": settings.SPORTMONKS_PERU_PRIMERA_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_PERU_PRIMERA_SEASON_ID,
+    },
+    "peru-segunda": {
+        "league_id": settings.SPORTMONKS_PERU_SEGUNDA_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_PERU_SEGUNDA_SEASON_ID,
+    },
+    "argentina-liga-profesional": {
+        "league_id": settings.SPORTMONKS_ARGENTINA_LIGA_PROFESIONAL_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_ARGENTINA_LIGA_PROFESIONAL_SEASON_ID,
+    },
+    "argentina-copa-argentina": {
+        "league_id": settings.SPORTMONKS_ARGENTINA_COPA_ARGENTINA_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_ARGENTINA_COPA_ARGENTINA_SEASON_ID,
+    },
+    "brasil-serie-a": {
+        "league_id": settings.SPORTMONKS_BRASIL_SERIE_A_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_BRASIL_SERIE_A_SEASON_ID,
+    },
+    "colombia-liga-betplay": {
+        "league_id": settings.SPORTMONKS_COLOMBIA_LIGA_BETPLAY_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_COLOMBIA_LIGA_BETPLAY_SEASON_ID,
+    },
+    "ecuador-liga-pro": {
+        "league_id": settings.SPORTMONKS_ECUADOR_LIGA_PRO_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_ECUADOR_LIGA_PRO_SEASON_ID,
+    },
+    "usa-mls": {
+        "league_id": settings.SPORTMONKS_USA_MLS_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_USA_MLS_SEASON_ID,
+    },
+    "mexico-liga-mx": {
+        "league_id": settings.SPORTMONKS_MEXICO_LIGA_MX_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_MEXICO_LIGA_MX_SEASON_ID,
+    },
+    "copa-libertadores": {
+        "league_id": settings.SPORTMONKS_CONMEBOL_COPA_LIBERTADORES_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_CONMEBOL_COPA_LIBERTADORES_SEASON_ID,
+    },
+    "copa-sudamericana": {
+        "league_id": settings.SPORTMONKS_CONMEBOL_COPA_SUDAMERICANA_LEAGUE_ID,
+        "season_id": settings.SPORTMONKS_CONMEBOL_COPA_SUDAMERICANA_SEASON_ID,
+    },
 }
 
 
