@@ -137,7 +137,7 @@ def _get_slug_config(slug: str) -> Dict[str, int]:
 
 async def _get_current_season_id(league_id: int) -> Optional[int]:
     data = await call_sportmonks(f"leagues/{league_id}", {"include": "currentSeason"})
-    season = (data.get("data") or {}).get("currentseason")
+    season = (data.get("data") or {}).get("currentSeason")
     if isinstance(season, dict):
         return season.get("id")
     return None
@@ -182,12 +182,14 @@ async def premier_standings(season_id: Optional[int] = None):
 @router.get("/public/premier/fixtures", summary="Premier League fixtures (Sportmonks)")
 async def premier_fixtures(
     date: Optional[date_type] = Query(None, description="Fecha YYYY-MM-DD"),
+    page: int = Query(1, ge=1, description="Pagina de resultados"),
 ):
     cfg = _get_slug_config("premier-league")
     target_date = (date or date_type.today()).isoformat()
     season_id = await _get_current_season_id(cfg["league_id"]) or cfg["season_id"]
     params = {
         "include": "participants;scores",
+        "page": page,
     }
     payload = await call_sportmonks(f"fixtures/date/{target_date}", params=params)
     return _filter_fixtures_by_league(payload, cfg["league_id"], season_id=season_id)
@@ -220,12 +222,14 @@ async def seriea_standings(season_id: Optional[int] = None):
 @router.get("/public/seriea/fixtures", summary="Serie A fixtures (Sportmonks)")
 async def seriea_fixtures(
     date: Optional[date_type] = Query(None, description="Fecha YYYY-MM-DD"),
+    page: int = Query(1, ge=1, description="Pagina de resultados"),
 ):
     cfg = _get_slug_config("serie-a")
     target_date = (date or date_type.today()).isoformat()
     season_id = await _get_current_season_id(cfg["league_id"]) or cfg["season_id"]
     params = {
         "include": "participants;scores",
+        "page": page,
     }
     payload = await call_sportmonks(f"fixtures/date/{target_date}", params=params)
     return _filter_fixtures_by_league(payload, cfg["league_id"], season_id=season_id)
@@ -260,12 +264,14 @@ async def league_fixtures(
     slug: str,
     date: Optional[date_type] = Query(None, description="Fecha YYYY-MM-DD"),
     next: Optional[int] = Query(None, description="Cantidad de partidos a futuro"),
+    page: int = Query(1, ge=1, description="Pagina de resultados"),
 ):
     cfg = _get_slug_config(slug)
     target_date = (date or date_type.today()).isoformat()
     season_id = await _get_current_season_id(cfg["league_id"]) or cfg["season_id"]
     params = {
         "include": "participants;scores",
+        "page": page,
     }
     payload = await call_sportmonks(f"fixtures/date/{target_date}", params=params)
     filtered = _filter_fixtures_by_league(payload, cfg["league_id"], season_id=season_id)
@@ -274,3 +280,43 @@ async def league_fixtures(
         new_payload["data"] = filtered["data"][:next]
         return new_payload
     return filtered
+
+
+
+# Endpoint temporal para depuración: devuelve el payload original de Sportmonks (sin filtrar)
+@router.get("/public/{slug}/fixtures/between/raw", summary="League fixtures between dates RAW (Sportmonks)")
+async def league_fixtures_between_raw(
+    slug: str,
+    start: date_type = Query(..., description="Fecha inicio YYYY-MM-DD"),
+    end: date_type = Query(..., description="Fecha fin YYYY-MM-DD"),
+    max_pages: int = Query(50, ge=1, le=200, description="Maximo de paginas a recolectar"),
+):
+    cfg = _get_slug_config(slug)
+    page = 1
+    collected = []
+    metas = []
+    while page <= max_pages:
+        params = {
+            "include": "participants;scores",
+            "page": page,
+        }
+        payload = await call_sportmonks(
+            f"fixtures/between/{start}/{end}",
+            params=params,
+        )
+        data = payload.get("data")
+        if not isinstance(data, list) or not data:
+            break
+        collected.extend(data)
+        metas.append(payload.get("meta") or {})
+        pagination = (payload.get("meta") or {}).get("pagination") or {}
+        total_pages = pagination.get("total_pages")
+        if total_pages is not None and page >= total_pages:
+            break
+        page += 1
+    return {
+        "data": collected,
+        "meta": metas,
+        "pages": page,
+        "max_pages": max_pages,
+    }

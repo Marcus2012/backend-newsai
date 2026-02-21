@@ -189,6 +189,7 @@ async def get_league_standings(slug: str):
 async def get_fixtures_by_date(
     slug: str,
     date: Optional[date_type] = Query(None, description="Fecha YYYY-MM-DD"),
+    page: int = Query(1, ge=1, description="Pagina de resultados"),
 ):
     cfg = _get_slug_config(slug)
     league_id = cfg["league_id"]
@@ -197,6 +198,26 @@ async def get_fixtures_by_date(
     params = {
         "filter": f"league_ids:{league_id}",
         "include": "participants;scores",
+        "page": page,
     }
 
     return await call_sportmonks(f"fixtures/date/{target_date}", params=params)
+
+
+@router.get("/fixtures/between/{slug}", summary="Partidos por rango de fechas (Sportmonks)")
+async def get_fixtures_between(
+    slug: str,
+    start: date_type = Query(..., description="Fecha inicio YYYY-MM-DD"),
+    end: date_type = Query(..., description="Fecha fin YYYY-MM-DD"),
+    page: int = Query(1, ge=1, description="Pagina de resultados"),
+):
+    cfg = _get_slug_config(slug)
+    league_id = cfg["league_id"]
+
+    params = {
+        "filter": f"league_ids:{league_id}",
+        "include": "participants;scores",
+        "page": page,
+    }
+
+    return await call_sportmonks(f"fixtures/between/{start}/{end}", params=params)
