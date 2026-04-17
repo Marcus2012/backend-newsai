@@ -171,8 +171,8 @@ async def get_league_standings(slug: str):
     cfg = _get_slug_config(slug)
     season_id = cfg["season_id"]
     data = await call_sportmonks(
-        "standings",
-        {"seasons": season_id, "include": "participant;details.type"},
+        f"standings/seasons/{season_id}",
+        {"include": "participant;details.type;group"},
     )
 
     standings = data.get("data", [])
@@ -181,6 +181,28 @@ async def get_league_standings(slug: str):
             summary = _extract_standing_summary(item.get("details"))
             item["summary"] = summary
             item["table"] = _summary_to_table(summary)
+
+    # Group standings by group_id for tournament-format leagues (Copa Libertadores, etc.)
+    groups_map: Dict[int, Dict[str, Any]] = {}
+    if isinstance(standings, list):
+        for item in standings:
+            gid = item.get("group_id")
+            if gid is not None:
+                if gid not in groups_map:
+                    group_info = item.get("group") or {}
+                    groups_map[gid] = {
+                        "group_id": gid,
+                        "group_name": group_info.get("name", f"Grupo {len(groups_map) + 1}"),
+                        "standings": [],
+                    }
+                groups_map[gid]["standings"].append(item)
+
+    if groups_map:
+        # Sort standings within each group by position
+        for g in groups_map.values():
+            g["standings"].sort(key=lambda x: x.get("position", 99))
+        # Sort groups by group name
+        data["groups"] = sorted(groups_map.values(), key=lambda g: g.get("group_name", ""))
 
     return data
 
