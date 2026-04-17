@@ -42,9 +42,9 @@ def _build_prompt(match: Dict[str, Any], stat_scoreline: Optional[str] = None, s
 def _predict_sync(prompt: str) -> Dict[str, Any]:
     if not settings.GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY no esta configurado")
-    # Prefer model name from settings (e.g. "models/gemini-2.5-pro").
-    model_name = getattr(settings, "GEMINI_MODEL", None) or "models/gemini-2.5-pro"
-    # Normalize model name: accept both "gemini-2.5-pro" and "models/gemini-2.5-pro"
+    # Prefer model name from settings (e.g. "models/gemini-2.5-flash").
+    model_name = getattr(settings, "GEMINI_MODEL", None) or "models/gemini-2.5-flash"
+    # Normalize model name: accept both "gemini-2.5-flash" and "models/gemini-2.5-flash"
     if not model_name.startswith("models/"):
         model_name = f"models/{model_name}"
     model = genai.GenerativeModel(model_name)

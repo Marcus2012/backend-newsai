@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     # Preferred Gemini model (can be overridden in .env)
-    GEMINI_MODEL: str = "gemini-2.5-pro"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     SCRAPEGRAPH_ENDPOINT: str = "http://localhost:8001/api/scrape"
     # Strapi configuration (production/staging)
     STRAPI_URL: str = ""
