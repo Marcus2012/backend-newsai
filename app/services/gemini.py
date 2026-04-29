@@ -48,7 +48,7 @@ def _choose_model() -> str:
             return maybe_full
 
     # common candidates (order of preference)
-    candidates = ["gemini-2.5-pro", "gemini-1.5", "gemini-1.5-pro", "gemini-pro", "gemini-1.0"]
+    candidates = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5", "gemini-1.5-pro", "gemini-pro", "gemini-1.0"]
     for c in candidates:
         # check both raw and namespaced forms
         if c in available:
@@ -61,7 +61,7 @@ def _choose_model() -> str:
     if preferred:
         return preferred
     # try a common namespaced default
-    for fallback in ["models/gemini-2.5-pro", "models/gemini-2.5-flash", "models/gemini-1.0"]:
+    for fallback in ["models/gemini-2.5-flash", "models/gemini-2.5-pro", "models/gemini-1.0"]:
         if fallback in available:
             return fallback
     return "gemini-1.0"
