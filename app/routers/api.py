@@ -14,4 +14,7 @@ async def predict_from_frontend(fixture: Dict[str, Any]):
         prediction = await football_ai.predict_match(fixture)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    return {"fixture": fixture, "prediction": prediction}
+
+    response = {"fixture": fixture, "prediction": prediction}
+    response.update(prediction)
+    return response

@@ -53,6 +53,7 @@ app = FastAPI(
 # Define allowed origins for different environments
 cors_origins = [
     "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "http://localhost:4200",
     "https://newsai-predictorfutbol.vercel.app", # Production Vercel
     "https://www.asieselfutbol.com",
