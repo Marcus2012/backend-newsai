@@ -89,3 +89,12 @@ class ScraperTemplate(Base):
     
     def __repr__(self):
         return f"<ScraperTemplate(id={self.id}, domain={self.domain})>"
+
+
+class MatchPrediction(Base):
+    """Cached AI predictions per fixture — once generated, always returned the same."""
+    __tablename__ = "match_predictions"
+
+    fixture_id = Column(String(36), primary_key=True)
+    prediction_data = Column(JSON, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())

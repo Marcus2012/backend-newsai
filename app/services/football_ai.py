@@ -278,13 +278,14 @@ def _fallback_prediction(match: Dict[str, Any], reason: str) -> Dict[str, Any]:
         "summary": f"Pronostico reservado para {home} vs {away}",
     }
 
-async def predict_match(match: Dict[str, Any]) -> Dict[str, Any]:
+async def predict_match(fixture: Dict[str, Any]) -> Dict[str, Any]:
     """Predice el resultado de un partido usando Gemini 2.5 Flash con datos de Sportmonks."""
+    match = fixture.get("match") if isinstance(fixture.get("match"), dict) else fixture
+
     home_name = match.get("home") or match.get("home_name") or match.get("homeTeam") or "Home"
     away_name = match.get("away") or match.get("away_name") or match.get("awayTeam") or "Away"
-    league_name = match.get("league") or match.get("league_name") or "Unknown"
-    
-    league_slug = league_name.lower().replace(" ", "-")
+
+    league_slug = match.get("league_slug") or ""
     
     home_stats = await _get_team_stats(home_name, league_slug)
     away_stats = await _get_team_stats(away_name, league_slug)

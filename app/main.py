@@ -3,7 +3,7 @@ from app.core.config import settings
 News AI Generator - Main Application Entry Point
 """
 import importlib
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
@@ -15,7 +15,7 @@ try:  # pragma: no cover
 except Exception:
     pass
 
-from app.core.database import init_db
+from app.core.database import get_db, init_db
 from app.core.config import settings
 from app.routers import auth, articles, templates, health
 from app.routers import football
@@ -24,6 +24,7 @@ from app.routers import scheduler as scheduler_router
 from app.routers import sportmonks
 from typing import Dict, Any
 from app.routers import api as api_module
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @asynccontextmanager
@@ -83,8 +84,8 @@ app.include_router(scheduler_router.router, prefix="/scheduler", tags=["Schedule
 
 # Compatibilidad: ruta raíz `/predict` usada por algunos frontends
 @app.post("/predict")
-async def predict_root(fixture: Dict[str, Any]):
-    return await api_module.predict_from_frontend(fixture)
+async def predict_root(fixture: Dict[str, Any], db: AsyncSession = Depends(get_db)):
+    return await api_module.predict_from_frontend(fixture, db)
 
 
 
