@@ -137,3 +137,7 @@ cython_debug/
 # IDEs
 .vscode/
 .idea/
+
+# Scripts / Cloud SQL Proxy
+scripts/
+

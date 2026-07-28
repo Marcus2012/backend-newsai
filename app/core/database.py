@@ -16,12 +16,11 @@ print(f"[INFO] DATABASE_URL en runtime: {settings.DATABASE_URL}")
 # Configurar connect_args según el tipo de base de datos
 connect_args = {}
 if "mysql" in settings.DATABASE_URL:
-    # Si se usa un socket Unix (proxy local), no habilitar SSL (el socket no usa TLS).
-    # Habilitar SSL solo para conexiones TCP a la IP pública de Cloud SQL.
-    if "unix_socket=" in settings.DATABASE_URL:
+    # Si se usa socket Unix, localhost, o la proxy de Railway (rlwy.net), no requerir SSL personalizado de Cloud SQL
+    if any(k in settings.DATABASE_URL for k in ["unix_socket=", "127.0.0.1", "localhost", "rlwy.net"]):
         connect_args = {"charset": "utf8mb4"}
     else:
-        # Configurar SSL para conexiones TCP a Cloud SQL
+        # Configurar SSL para conexiones TCP directas a Cloud SQL
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -29,6 +28,7 @@ if "mysql" in settings.DATABASE_URL:
             "charset": "utf8mb4",
             "ssl": ssl_context
         }
+
 elif "postgresql" in settings.DATABASE_URL:
     connect_args = {"server_settings": {"application_name": "news_ai_app"}}
 
